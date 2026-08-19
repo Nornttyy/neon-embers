@@ -1,4 +1,4 @@
-const CACHE_VERSION = "neon-embers-v11-player-core-art";
+const CACHE_VERSION = "neon-embers-v12-fixed-action-mission";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -23,7 +23,6 @@ const APP_SHELL = [
   "./assets/enemies/shield-drone.png",
   "./assets/enemies/elite-drone.png",
   "./assets/enemies/boss-drone.png",
-  "./assets/world/energy-terminal.png",
   "./assets/world/arena-pylon.png",
   "./assets/audio/swing-whoosh-1.wav",
   "./assets/audio/swing-whoosh-2.wav",

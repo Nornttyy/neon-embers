@@ -50,16 +50,13 @@ const elements = {
   metaScrap: byId("meta-scrap"),
   coreGrid: byId("core-grid"),
   metaGrid: byId("meta-grid"),
-  upgradeGrid: byId("upgrade-grid"),
-  rerollButton: byId("reroll-button"),
-  rerollCount: byId("reroll-count"),
   weaponDock: byId("weapon-dock"),
   healthFill: byId("health-fill"),
   healthText: byId("health-text"),
   shieldFill: byId("shield-fill"),
-  xpFill: byId("xp-fill"),
+  missionFill: byId("mission-fill"),
   staminaText: byId("stamina-text"),
-  hudLevel: byId("hud-level"),
+  hudMission: byId("hud-mission"),
   hudPhase: byId("hud-phase"),
   hudTime: byId("hud-time"),
   hudKills: byId("hud-kills"),
@@ -155,7 +152,7 @@ function renderMeta() {
     button.className = "meta-buy";
     button.type = "button";
     button.disabled = level >= definition.max || profile.scrap < cost;
-    button.textContent = level >= definition.max ? "已满级" : `${cost} 核心能源`;
+    button.textContent = level >= definition.max ? "已完成" : `${cost} 核心能源`;
     button.addEventListener("click", () => {
       if (profile.scrap < cost || level >= definition.max) return;
       profile.scrap -= cost;
@@ -164,7 +161,7 @@ function renderMeta() {
       renderProfile();
       renderMeta();
       audio.pickup();
-      showToast(`${definition.name} 已升级`);
+      showToast(`${definition.name} 已校准`);
     });
     item.append(info, button);
     elements.metaGrid.append(item);
@@ -172,12 +169,12 @@ function renderMeta() {
 }
 
 function renderHud(data) {
-  elements.hudLevel.textContent = data.level;
+  elements.hudMission.textContent = data.mission;
   elements.healthFill.style.width = `${Math.max(0, data.health / data.maxHealth * 100)}%`;
   elements.healthText.textContent = `${Math.ceil(data.health)} / ${Math.round(data.maxHealth)}`;
   elements.shieldFill.style.width = `${data.shieldMax ? Math.max(0, data.shield / data.shieldMax * 100) : 0}%`;
   elements.staminaText.textContent = `体力 ${Math.ceil(data.shield)} / ${Math.round(data.shieldMax)}`;
-  elements.xpFill.style.width = `${Math.max(0, data.xp / data.xpNeeded * 100)}%`;
+  elements.missionFill.style.width = `${Math.max(0, data.progress * 100)}%`;
   elements.hudPhase.textContent = data.phase;
   elements.hudTime.textContent = data.time;
   elements.hudKills.textContent = data.kills;
@@ -186,13 +183,13 @@ function renderHud(data) {
   elements.dashFill.style.width = `${data.dash * 100}%`;
   elements.skillFill.style.width = `${data.skill * 100}%`;
 
-  const signature = data.weapons.map((weapon) => `${weapon.id}:${weapon.level}:${weapon.ammo || ""}`).join("|");
+  const signature = data.weapons.map((weapon) => `${weapon.id}:${weapon.ammo || ""}`).join("|");
   if (elements.weaponDock.dataset.signature !== signature) {
     elements.weaponDock.dataset.signature = signature;
     elements.weaponDock.innerHTML = data.weapons.map((weapon) => `
-      <div class="weapon-chip" style="--weapon-color:${weapon.color}" title="${weapon.name} · 等级 ${weapon.level}">
+      <div class="weapon-chip" style="--weapon-color:${weapon.color}" title="${weapon.name} · 固定装备">
         ${weapon.asset ? `<img src="${weapon.asset}" alt="" />` : `<b>${weapon.name.slice(0, 2)}</b>`}
-        <span>${weapon.ammo || `LV ${weapon.level}`}</span>
+        <span>${weapon.ammo || "固定"}</span>
       </div>
     `).join("");
   }
@@ -204,32 +201,6 @@ function renderHud(data) {
   }
 }
 
-const rarityLabel = { common: "标准协议", rare: "稀有协议", epic: "史诗协议" };
-const rarityColor = { common: "#4df6ff", rare: "#b77dff", epic: "#ffcc66" };
-
-function renderUpgradeChoices(choices) {
-  elements.upgradeGrid.replaceChildren();
-  for (const choice of choices) {
-    const button = document.createElement("button");
-    const currentLevel = game.run?.upgradeLevels[choice.id] || 0;
-    button.type = "button";
-    button.className = "upgrade-card";
-    button.style.setProperty("--card-color", rarityColor[choice.rarity] || rarityColor.common);
-    button.disabled = game.run.energy < choice.cost;
-    button.innerHTML = `
-      <span class="rarity">${rarityLabel[choice.rarity] || rarityLabel.common}</span>
-      ${choice.asset ? `<img class="upgrade-art" src="${choice.asset}" alt="" />` : `<div class="upgrade-symbol" aria-hidden="true"><i></i></div>`}
-      <h3>${choice.name}</h3>
-      <p>${choice.description}</p>
-      <small>${choice.cost} 能源 · 当前 ${currentLevel} / ${choice.max}</small>
-    `;
-    button.addEventListener("click", () => game.chooseUpgrade(choice.id));
-    elements.upgradeGrid.append(button);
-  }
-  elements.rerollCount.textContent = game.run?.rerolls || 0;
-  elements.rerollButton.disabled = !game.run?.rerolls;
-}
-
 function showResult(summary) {
   profile.scrap += summary.scrap;
   profile.bestTime = Math.max(profile.bestTime, Math.round(summary.time));
@@ -239,23 +210,18 @@ function showResult(summary) {
   saveProfile();
   renderProfile();
 
-  byId("result-kicker").textContent = summary.victory ? "RUN COMPLETE" : "SIGNAL LOST";
+  byId("result-kicker").textContent = summary.victory ? "MISSION COMPLETE" : "SIGNAL LOST";
   byId("result-title").textContent = summary.victory ? "训练完成" : "球体离线";
-  byId("result-subtitle").textContent = summary.victory ? "零号执行体已被清除。" : "已保存本次回收的核心能源。";
+  byId("result-subtitle").textContent = summary.victory ? "零号执行体已被清除。" : "任务失败，已保存本次回收记录。";
   byId("result-time").textContent = summary.timeText;
   byId("result-kills").textContent = summary.kills;
-  byId("result-level").textContent = summary.level;
+  byId("result-energy").textContent = summary.energy;
   byId("result-scrap").textContent = `+${summary.scrap}`;
   showGameLayer("result-screen");
 }
 
 const game = new Game(byId("game-canvas"), {
   onHud: renderHud,
-  onUpgrade: (choices) => {
-    renderUpgradeChoices(choices);
-    showGameLayer("upgrade-screen");
-  },
-  onUpgradeClosed: () => showGameLayer(),
   onPauseChange: (paused) => {
     if (paused) showGameLayer("pause-screen");
     else showGameLayer();
@@ -361,19 +327,6 @@ byId("restart-button").addEventListener("click", () => beginRun(profile.lastCore
 byId("quit-button").addEventListener("click", returnToMenu);
 byId("again-button").addEventListener("click", () => beginRun(profile.lastCore));
 byId("result-menu-button").addEventListener("click", returnToMenu);
-elements.rerollButton.addEventListener("click", () => {
-  if (game.rerollUpgrades()) {
-    elements.rerollCount.textContent = game.run.rerolls;
-    elements.rerollButton.disabled = !game.run.rerolls;
-  }
-});
-
-window.addEventListener("keydown", (event) => {
-  if (currentScreen === "upgrade-screen" && ["1", "2", "3"].includes(event.key)) {
-    elements.upgradeGrid.children[Number(event.key) - 1]?.click();
-  }
-});
-
 const joystickZone = byId("joystick-zone");
 const joystickKnob = byId("joystick-knob");
 let joystickPointer = null;

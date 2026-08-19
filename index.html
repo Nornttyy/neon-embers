@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#060812" />
-    <meta name="description" content="霓虹余烬：操控科技小球近战、射击、闪避和招架的赛博动作肉鸽。" />
+    <meta name="description" content="霓虹余烬：操控科技小球近战、射击、闪避和招架的赛博动作游戏。" />
     <meta name="application-name" content="霓虹余烬" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -27,7 +27,7 @@
 
       <section id="menu-screen" class="screen menu-screen is-active" aria-labelledby="game-title">
         <div class="menu-topline">
-          <span class="signal"><i></i> ACTION SLICE // 0.2</span>
+          <span class="signal"><i></i> ACTION MISSION // 0.5</span>
           <button class="icon-button" id="settings-button" type="button" aria-label="打开设置">⚙</button>
         </div>
 
@@ -39,9 +39,9 @@
 
           <div class="menu-actions">
             <button class="primary-button" id="start-button" type="button">
-              <span>开始单机训练</span><small>选择科技球体的近战模块</small>
+              <span>开始单机任务</span><small>选择固定装备，清除训练首领</small>
             </button>
-            <button class="secondary-button" id="meta-button" type="button">核心能源升级</button>
+            <button class="secondary-button" id="meta-button" type="button">装备校准</button>
             <button class="secondary-button" id="guide-button" type="button">新手教程</button>
           </div>
 
@@ -71,10 +71,10 @@
         <div class="panel-shell">
           <button class="back-button" data-back="menu-screen" type="button">← 返回</button>
           <p class="eyebrow">PERSISTENT CALIBRATION</p>
-          <h2 id="meta-title">核心能源升级</h2>
+          <h2 id="meta-title">装备校准</h2>
           <div class="currency-line">可用核心能源 <strong id="meta-scrap">0</strong></div>
           <div id="meta-grid" class="meta-grid"></div>
-          <p class="fine-print">永久成长设有上限，主要帮助熟悉流程，不替代局内构筑。</p>
+          <p class="fine-print">固定校准只在任务外进行；战斗中不会随机升级或弹出构筑选择。</p>
         </div>
       </section>
 
@@ -89,7 +89,7 @@
             <article><b>03</b><div><h3>格挡与招架</h3><p>按住右键或 K 正面格挡。攻击命中前一瞬开始格挡可精准招架。</p></div></article>
             <article><b>04</b><div><h3>闪避、远程与技能</h3><p>空格闪避，Q 发射轨道手枪，E 使用球体主动技能。</p></div></article>
           </div>
-          <div class="guide-tip"><span>能源购买</span>击败敌人收集战术能源。终端开启后，选择并购买一项装备强化。</div>
+          <div class="guide-tip"><span>任务目标</span>按固定阶段清除敌群与精英，最终击败零号执行体。回收能源只用于任务结算。</div>
           <button class="primary-button compact" id="guide-start-button" type="button"><span>明白，选择球体</span></button>
         </div>
       </section>
@@ -109,21 +109,21 @@
 
       <section id="hud" class="hud" aria-label="游戏状态">
         <div class="hud-top-left">
-          <div class="level-badge"><small>LV</small><strong id="hud-level">1</strong></div>
+          <div class="level-badge"><small>MIS</small><strong id="hud-mission">01</strong></div>
           <div class="bar-stack">
             <div class="bar health-bar"><i id="health-fill"></i><span id="health-text">100 / 100</span></div>
             <div class="bar shield-bar"><i id="shield-fill"></i><span id="stamina-text">体力 100 / 100</span></div>
-            <div class="bar xp-bar"><i id="xp-fill"></i></div>
+            <div class="bar mission-bar"><i id="mission-fill"></i></div>
           </div>
         </div>
         <div class="hud-objective">
           <span id="hud-phase">敌潮 01</span>
           <strong id="hud-time">06:00</strong>
-          <small id="hud-objective-text">击败敌人，收集能源</small>
+          <small id="hud-objective-text">完成阶段目标，清除首领</small>
         </div>
         <div class="hud-top-right">
           <div><span>击杀</span><strong id="hud-kills">0</strong></div>
-          <div><span>战术能源</span><strong id="hud-scrap">0</strong></div>
+          <div><span>回收能源</span><strong id="hud-scrap">0</strong></div>
           <div><span>手枪弹药</span><strong id="hud-ammo">6/6</strong></div>
           <button id="pause-button" class="hud-pause" type="button" aria-label="暂停">Ⅱ</button>
         </div>
@@ -133,17 +133,6 @@
           <div class="skill-indicator"><span>技能</span><i><b id="skill-fill"></b></i><kbd>E</kbd></div>
         </div>
         <div id="boss-bar" class="boss-bar"><span id="boss-name">零号收割机</span><i><b id="boss-fill"></b></i></div>
-      </section>
-
-      <section id="upgrade-screen" class="screen game-overlay" aria-labelledby="upgrade-title">
-        <div class="upgrade-shell">
-          <img class="terminal-art" src="assets/world/energy-terminal.png" alt="" />
-          <p class="eyebrow">ENERGY TERMINAL</p>
-          <h2 id="upgrade-title">购买一项闯关装备</h2>
-          <p class="panel-lead">战斗已暂停。每件物品都会消耗当前战术能源。</p>
-          <div id="upgrade-grid" class="upgrade-grid"></div>
-          <button id="reroll-button" class="text-button" type="button">本局免费刷新 <span id="reroll-count">1</span></button>
-        </div>
       </section>
 
       <section id="pause-screen" class="screen game-overlay" aria-labelledby="pause-title">
@@ -158,14 +147,14 @@
 
       <section id="result-screen" class="screen game-overlay" aria-labelledby="result-title">
         <div class="panel-shell result-panel">
-          <p id="result-kicker" class="eyebrow">RUN COMPLETE</p>
+          <p id="result-kicker" class="eyebrow">MISSION COMPLETE</p>
           <h2 id="result-title">协议完成</h2>
           <p id="result-subtitle" class="panel-lead">余烬已安全回收。</p>
           <div class="result-stats">
             <div><span>存活时间</span><strong id="result-time">00:00</strong></div>
             <div><span>击杀</span><strong id="result-kills">0</strong></div>
-            <div><span>等级</span><strong id="result-level">1</strong></div>
-            <div class="accent-stat"><span>核心能源</span><strong id="result-scrap">0</strong></div>
+            <div><span>回收能源</span><strong id="result-energy">0</strong></div>
+            <div class="accent-stat"><span>任务奖励</span><strong id="result-scrap">0</strong></div>
           </div>
           <div class="result-actions">
             <button class="primary-button compact" id="again-button" type="button"><span>再次行动</span></button>

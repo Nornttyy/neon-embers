@@ -82,25 +82,6 @@ export const ENEMIES = Object.freeze({
   boss: { id: "boss", name: "零号执行体", color: "#ff2e67", radius: 58, hp: 2900, speed: 57, damage: 38, energy: 100, reach: 118, windup: 0.82, heavy: true, ranged: true, boss: true },
 });
 
-export const UPGRADES = Object.freeze([
-  { id: "blade_power", name: "锋刃增压", rarity: "common", max: 5, description: "近战伤害 +18%。", stat: "meleeDamage", amount: 0.18, cost: 22, asset: "assets/items/energy-sword.png" },
-  { id: "blade_reach", name: "广域挥击", rarity: "common", max: 3, description: "挥击角度 +8%，武器尺寸不变。", stat: "swingArc", amount: 0.08, cost: 20, asset: "assets/items/energy-sword.png" },
-  { id: "blade_speed", name: "动作超频", rarity: "rare", max: 3, description: "近战动作速度 +10%。", stat: "attackSpeed", amount: 0.1, cost: 28 },
-  { id: "rail_power", name: "轨道增幅器", rarity: "common", max: 5, description: "轨道手枪伤害 +20%。", stat: "rangedDamage", amount: 0.2, cost: 22, asset: "assets/items/rail-pistol.png" },
-  { id: "rail_mag", name: "扩展弹匣", rarity: "rare", max: 3, description: "弹匣容量 +2，并立即装满。", stat: "ammo", amount: 2, cost: 27, asset: "assets/items/rail-pistol.png" },
-  { id: "rail_haste", name: "快速装填", rarity: "common", max: 3, description: "装填时间 -15%。", stat: "reload", amount: 0.15, cost: 20, asset: "assets/items/rail-pistol.png" },
-  { id: "stamina", name: "高密度电容", rarity: "common", max: 4, description: "最大体力 +18，并恢复体力。", stat: "stamina", amount: 18, cost: 21, asset: "assets/items/energy-core.png" },
-  { id: "stamina_regen", name: "回流总线", rarity: "common", max: 4, description: "体力恢复速度 +16%。", stat: "staminaRegen", amount: 0.16, cost: 21, asset: "assets/items/energy-core.png" },
-  { id: "dash", name: "折跃回路", rarity: "rare", max: 3, description: "闪避冷却 -14%。", stat: "dashCooldown", amount: 0.14, cost: 27 },
-  { id: "guard", name: "定向屏障", rarity: "common", max: 3, description: "格挡消耗 -15%。", stat: "guardEfficiency", amount: 0.15, cost: 22 },
-  { id: "parry", name: "预判模块", rarity: "epic", max: 2, description: "精准招架窗口 +35 毫秒。", stat: "parryWindow", amount: 0.035, cost: 34 },
-  { id: "skill", name: "技能冷却器", rarity: "rare", max: 3, description: "主动技能冷却 -12%。", stat: "skillCooldown", amount: 0.12, cost: 29, asset: "assets/items/energy-core.png" },
-  { id: "health", name: "再生装甲", rarity: "common", max: 4, description: "最大生命 +22，并恢复 22。", stat: "health", amount: 22, cost: 22 },
-  { id: "speed", name: "矢量推进", rarity: "common", max: 4, description: "移动速度 +7%。", stat: "speed", amount: 0.07, cost: 20 },
-  { id: "repair", name: "战地维修", rarity: "rare", max: 4, description: "立即恢复 35 点生命。", stat: "repair", amount: 35, cost: 18 },
-  { id: "energy", name: "回收磁场", rarity: "rare", max: 3, description: "能源获取量 +15%。", stat: "energyGain", amount: 0.15, cost: 25, asset: "assets/items/energy-core.png" },
-]);
-
 export const META_UPGRADES = Object.freeze([
   { id: "power", name: "初始校准", description: "单机与合作模式基础伤害 +4%", max: 5, baseCost: 45 },
   { id: "armor", name: "备用装甲", description: "单机与合作模式初始生命 +8", max: 5, baseCost: 40 },
@@ -113,10 +94,6 @@ export function getWaveProfile(elapsed) {
   if (elapsed < 115) return { rate: 1.58, pool: ["chaser", "skitter", "shooter", "brute"] };
   if (elapsed < GAME.bossTime) return { rate: 1.28, pool: ["skitter", "shooter", "brute", "sentinel", "lancer"] };
   return { rate: 1.55, pool: ["chaser", "shooter", "lancer"] };
-}
-
-export function xpForLevel(level) {
-  return Math.round(28 + level * 14 + Math.pow(level, 1.25) * 3);
 }
 
 export function metaCost(definition, currentLevel) {

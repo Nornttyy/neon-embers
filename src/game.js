@@ -1,4 +1,4 @@
-import { CORES, ENEMIES, GAME, UPGRADES, WEAPONS, getWaveProfile, xpForLevel } from "./config.js";
+import { CORES, ENEMIES, GAME, WEAPONS, getWaveProfile } from "./config.js";
 import { audio } from "./audio.js";
 
 const TAU = Math.PI * 2;
@@ -93,7 +93,6 @@ export class Game {
       enemyShield: "assets/enemies/shield-drone.png",
       enemyElite: "assets/enemies/elite-drone.png",
       enemyBoss: "assets/enemies/boss-drone.png",
-      terminal: "assets/world/energy-terminal.png",
       pylon: "assets/world/arena-pylon.png",
     })) {
       const image = new Image();
@@ -269,15 +268,8 @@ export class Game {
       kills: 0,
       scrap: 0,
       energy: 0,
-      energyCollected: 0,
-      energySpent: 0,
-      level: 1,
-      xp: 0,
-      xpNeeded: xpForLevel(1),
-      nextTerminal: xpForLevel(1),
-      rerolls: 1,
-      upgradeLevels: {},
-      currentChoices: [],
+      spawnCount: 0,
+      mission: "01",
       bossSpawned: false,
       boss: null,
       victory: false,
@@ -328,7 +320,6 @@ export class Game {
         dashCooldown: 1,
         skillCooldown: 1,
         reload: 1,
-        energyGain: 1,
       },
     };
     this.enemies = [];
@@ -658,7 +649,8 @@ export class Game {
     run.spawnTimer -= dt;
     if (run.spawnTimer <= 0 && this.enemies.length < GAME.maxEnemies) {
       const profile = getWaveProfile(run.elapsed);
-      const type = profile.pool[Math.floor(Math.random() * profile.pool.length)];
+      const type = profile.pool[run.spawnCount % profile.pool.length];
+      run.spawnCount += 1;
       this.spawnEnemy(type);
       const crowdSlowdown = 1 + Math.max(0, this.enemies.length - 8) / 24 * 0.85;
       run.spawnTimer = profile.rate * crowdSlowdown * randomBetween(0.88, 1.16);
@@ -864,7 +856,7 @@ export class Game {
     if (enemy.dead) return;
     enemy.dead = true;
     this.run.kills += 1;
-    const energy = Math.max(1, Math.round(enemy.energy * this.player.stats.energyGain));
+    const energy = Math.max(1, Math.round(enemy.energy));
     const count = enemy.boss ? 10 : enemy.elite ? 4 : 1;
     for (let index = 0; index < count; index += 1) {
       const angle = Math.random() * TAU;
@@ -970,95 +962,7 @@ export class Game {
 
   collectEnergy(value) {
     this.run.energy += value;
-    this.run.energyCollected += value;
-    this.run.xp = this.run.energyCollected;
     audio.pickup();
-    if (!this.run.bossSpawned && this.run.energyCollected >= this.run.nextTerminal) this.openTerminal();
-  }
-
-  addXp(amount) {
-    if (!this.run) return;
-    this.collectEnergy(Math.max(0, Number(amount) || 0));
-  }
-
-  availableUpgrades() {
-    return UPGRADES.filter((upgrade) => (this.run.upgradeLevels[upgrade.id] || 0) < upgrade.max);
-  }
-
-  makeUpgradeChoices() {
-    const pool = [...this.availableUpgrades()];
-    const choices = [];
-    while (pool.length && choices.length < 3) {
-      const index = Math.floor(Math.random() * pool.length);
-      choices.push(pool.splice(index, 1)[0]);
-    }
-    return choices;
-  }
-
-  openTerminal() {
-    if (this.state !== "playing") return;
-    this.state = "upgrading";
-    this.run.currentChoices = this.makeUpgradeChoices();
-    this.run.nextTerminal += xpForLevel(this.run.level + 1);
-    this.run.xpNeeded = this.run.nextTerminal;
-    this.callbacks.onUpgrade?.(this.run.currentChoices);
-    audio.levelUp();
-  }
-
-  chooseUpgrade(id) {
-    if (this.state !== "upgrading") return false;
-    const upgrade = this.run.currentChoices.find((choice) => choice.id === id);
-    if (!upgrade || this.run.energy < upgrade.cost) {
-      this.callbacks.onAnnouncement?.({ title: "能源不足", subtitle: `需要 ${upgrade?.cost || 0} 点战术能源` });
-      return false;
-    }
-    this.run.energy -= upgrade.cost;
-    this.run.energySpent += upgrade.cost;
-    this.run.level += 1;
-    this.run.upgradeLevels[id] = (this.run.upgradeLevels[id] || 0) + 1;
-    this.applyUpgrade(upgrade);
-    this.state = "playing";
-    this.lastFrame = performance.now();
-    this.callbacks.onUpgradeClosed?.();
-    this.emitHud(true);
-    return true;
-  }
-
-  applyUpgrade(upgrade) {
-    const player = this.player;
-    if (upgrade.stat === "meleeDamage") player.stats.meleeDamage += upgrade.amount;
-    if (upgrade.stat === "swingArc") player.stats.swingArc += upgrade.amount;
-    if (upgrade.stat === "attackSpeed") player.stats.attackSpeed += upgrade.amount;
-    if (upgrade.stat === "rangedDamage") player.stats.rangedDamage += upgrade.amount;
-    if (upgrade.stat === "ammo") {
-      player.maxAmmo += upgrade.amount;
-      player.ammo = player.maxAmmo;
-    }
-    if (upgrade.stat === "reload") player.stats.reload = Math.max(0.45, player.stats.reload - upgrade.amount);
-    if (upgrade.stat === "stamina") {
-      player.maxStamina += upgrade.amount;
-      player.stamina = player.maxStamina;
-    }
-    if (upgrade.stat === "staminaRegen") player.stats.staminaRegen += upgrade.amount;
-    if (upgrade.stat === "dashCooldown") player.stats.dashCooldown = Math.max(0.45, player.stats.dashCooldown - upgrade.amount);
-    if (upgrade.stat === "guardEfficiency") player.stats.guardEfficiency = Math.max(0.45, player.stats.guardEfficiency - upgrade.amount);
-    if (upgrade.stat === "parryWindow") player.stats.parryWindow += upgrade.amount;
-    if (upgrade.stat === "skillCooldown") player.stats.skillCooldown = Math.max(0.5, player.stats.skillCooldown - upgrade.amount);
-    if (upgrade.stat === "health") {
-      player.maxHealth += upgrade.amount;
-      player.health = Math.min(player.maxHealth, player.health + upgrade.amount);
-    }
-    if (upgrade.stat === "speed") player.stats.speed += upgrade.amount;
-    if (upgrade.stat === "repair") player.health = Math.min(player.maxHealth, player.health + upgrade.amount);
-    if (upgrade.stat === "energyGain") player.stats.energyGain += upgrade.amount;
-  }
-
-  rerollUpgrades() {
-    if (this.state !== "upgrading" || this.run.rerolls <= 0) return false;
-    this.run.rerolls -= 1;
-    this.run.currentChoices = this.makeUpgradeChoices();
-    this.callbacks.onUpgrade?.(this.run.currentChoices);
-    return true;
   }
 
   updateWeaponTrails(dt) {
@@ -1118,7 +1022,7 @@ export class Game {
     this.run.victory = victory;
     this.state = "result";
     audio.endRun(victory);
-    const coreEnergy = Math.max(1, Math.round((this.run.kills * 0.85 + this.run.energySpent * 0.35 + (victory ? 55 : 0)) * (1 + this.run.metaRecovery * 0.06)));
+    const coreEnergy = Math.max(1, Math.round((this.run.kills * 0.85 + this.run.energy * 0.25 + (victory ? 55 : 0)) * (1 + this.run.metaRecovery * 0.06)));
     this.run.scrap = coreEnergy;
     this.callbacks.onResult?.({
       victory,
@@ -1126,7 +1030,8 @@ export class Game {
       time: this.run.elapsed,
       timeText: formatTime(this.run.elapsed),
       kills: this.run.kills,
-      level: this.run.level,
+      mission: this.run.mission,
+      energy: this.run.energy,
       scrap: coreEnergy,
     });
   }
@@ -1137,13 +1042,12 @@ export class Game {
     const melee = WEAPONS[this.run.core.weapon];
     const remaining = Math.max(0, GAME.runDuration - this.run.elapsed);
     this.callbacks.onHud?.({
-      level: this.run.level,
+      mission: this.run.mission,
       health: player.health,
       maxHealth: player.maxHealth,
       shield: player.stamina,
       shieldMax: player.maxStamina,
-      xp: this.run.energyCollected,
-      xpNeeded: this.run.nextTerminal,
+      progress: clamp(this.run.elapsed / GAME.bossTime, 0, 1),
       phase: this.run.bossSpawned ? "最终训练" : this.run.elapsed < 45 ? "动作校准" : this.run.elapsed < 105 ? "混合敌群" : "高压协议",
       time: formatTime(remaining),
       kills: this.run.kills,
@@ -1155,8 +1059,8 @@ export class Game {
       skill: 1 - clamp(player.skillCooldown / (8 * player.stats.skillCooldown), 0, 1),
       action: player.action,
       weapons: [
-        { id: melee.id, name: melee.name, color: melee.color, level: 1 + Math.floor((this.run.upgradeLevels.blade_power || 0) / 2), asset: melee.asset },
-        { id: "rail", name: WEAPONS.rail.name, color: WEAPONS.rail.color, level: 1 + (this.run.upgradeLevels.rail_power || 0), asset: WEAPONS.rail.asset, ammo: `${player.ammo}/${player.maxAmmo}` },
+        { id: melee.id, name: melee.name, color: melee.color, asset: melee.asset },
+        { id: "rail", name: WEAPONS.rail.name, color: WEAPONS.rail.color, asset: WEAPONS.rail.asset, ammo: `${player.ammo}/${player.maxAmmo}` },
       ],
       boss: this.run.boss && !this.run.boss.dead ? { name: this.run.boss.name, ratio: Math.max(0, this.run.boss.hp / this.run.boss.maxHp) } : null,
     });
