@@ -43,7 +43,13 @@ export class Game {
       x: Math.random(), y: Math.random(), size: randomBetween(0.5, 2.1), phase: Math.random() * TAU,
     }));
     this.images = {};
-    for (const [id, path] of Object.entries({ sword: WEAPONS.blade.asset, pistol: WEAPONS.rail.asset, energy: "assets/items/energy-core.png" })) {
+    for (const [id, path] of Object.entries({
+      blade: WEAPONS.blade.asset,
+      twin: WEAPONS.twin.asset,
+      hammer: WEAPONS.hammer.asset,
+      pistol: WEAPONS.rail.asset,
+      energy: "assets/items/energy-core.png",
+    })) {
       const image = new Image();
       image.src = path;
       this.images[id] = image;
@@ -165,7 +171,7 @@ export class Game {
     player.ammo -= 1;
     player.rangedCooldown = WEAPONS.rail.cooldown;
     this.effects.push({ type: "muzzle", x: player.x + direction.x * 33, y: player.y + direction.y * 33, angle: player.facing, life: 0.12, maxLife: 0.12, color: WEAPONS.rail.color });
-    audio.shoot("beam");
+    audio.shoot("rail");
     if (player.ammo <= 0) this.startReload();
   }
 
@@ -187,16 +193,14 @@ export class Game {
         }
       }
       this.effects.push({ type: "ring", x: player.x, y: player.y, radius: 190, life: 0.42, maxLife: 0.42, color: "#4df6ff" });
-      audio.shoot("arc");
     } else if (this.run.core.skill === "overdrive") {
       player.overdrive = 5;
       this.effects.push({ type: "ring", x: player.x, y: player.y, radius: 95, life: 0.5, maxLife: 0.5, color: "#b77dff" });
-      audio.levelUp();
     } else {
       player.barrier = Math.max(player.barrier, 55);
       this.effects.push({ type: "ring", x: player.x, y: player.y, radius: 82, life: 0.5, maxLife: 0.5, color: "#ffcc66" });
-      audio.levelUp();
     }
+    audio.skill(this.run.core.skill);
     this.spawnBurst(player.x, player.y, this.run.core.color, 22, 210);
   }
 
@@ -213,7 +217,7 @@ export class Game {
       coreId: core.id,
       core,
       elapsed: 0,
-      spawnTimer: 0.35,
+      spawnTimer: 1.15,
       kills: 0,
       scrap: 0,
       energy: 0,
@@ -421,7 +425,7 @@ export class Game {
       if (player.reloadTimer <= 0) {
         player.reloadTimer = 0;
         player.ammo = player.maxAmmo;
-        audio.pickup();
+        audio.reload();
       }
     }
 
@@ -500,7 +504,7 @@ export class Game {
       player.x = clamp(player.x + Math.cos(player.facing) * combo[index].lunge, 42, GAME.width - 42);
       player.y = clamp(player.y + Math.sin(player.facing) * combo[index].lunge, 42, GAME.height - 42);
     }
-    audio.shoot(index === 2 ? "arc" : "pulse");
+    audio.melee(this.run.core.weapon, index);
   }
 
   updateAttack(dt) {
@@ -559,7 +563,8 @@ export class Game {
       const profile = getWaveProfile(run.elapsed);
       const type = profile.pool[Math.floor(Math.random() * profile.pool.length)];
       this.spawnEnemy(type);
-      run.spawnTimer = profile.rate * randomBetween(0.82, 1.18);
+      const crowdSlowdown = 1 + Math.max(0, this.enemies.length - 8) / 24 * 0.85;
+      run.spawnTimer = profile.rate * crowdSlowdown * randomBetween(0.88, 1.16);
     }
   }
 
@@ -733,9 +738,21 @@ export class Game {
       enemy.pushY += direction.y * knockback;
     }
     this.damageTexts.push({ x: enemy.x, y: enemy.y - enemy.radius, text: String(Math.round(amount)), color: kind === "rail" ? "#c9a6ff" : "#bfffff", life: 0.65, maxLife: 0.65 });
+    if (direction) {
+      this.effects.push({
+        type: "impact",
+        x: enemy.x,
+        y: enemy.y,
+        angle: Math.atan2(direction.y, direction.x),
+        radius: enemy.boss ? 34 : 22,
+        life: kind === "melee" ? 0.22 : 0.16,
+        maxLife: kind === "melee" ? 0.22 : 0.16,
+        color: kind === "rail" ? "#b77dff" : this.run.core.color,
+      });
+    }
     this.spawnBurst(enemy.x, enemy.y, kind === "rail" ? "#b77dff" : "#4df6ff", enemy.boss ? 8 : 4, 110);
     this.shake = Math.max(this.shake, kind === "melee" ? 3.5 : 2);
-    audio.hit();
+    audio.hit(kind);
     if (enemy.hp <= 0) this.killEnemy(enemy);
   }
 
@@ -778,14 +795,14 @@ export class Game {
         player.stamina = Math.min(player.maxStamina, player.stamina + 10);
         this.effects.push({ type: "ring", x: player.x, y: player.y, radius: 70, life: 0.3, maxLife: 0.3, color: "#ffffff" });
         this.callbacks.onAnnouncement?.({ title: "精准招架", subtitle: "攻击者已失衡" });
-        audio.levelUp();
+        audio.guard(true);
         return "parry";
       }
       const staminaCost = amount * 0.82 * guardPressure * player.stats.guardEfficiency;
       player.stamina -= staminaCost;
       player.staminaDelay = 0.7;
       this.effects.push({ type: "block", x: player.x, y: player.y, angle: player.facing, life: 0.2, maxLife: 0.2, color: "#4df6ff" });
-      audio.hit();
+      audio.guard(false);
       if (player.stamina <= 0) {
         this.breakGuard();
         this.applyHealthDamage(amount * 0.42);
@@ -1192,41 +1209,28 @@ export class Game {
   renderPlayer(ctx, time) {
     const player = this.player;
     if (player.invulnerable > 0 && Math.floor(player.invulnerable * 22) % 2 === 0) ctx.globalAlpha = 0.48;
-    if (player.action === "attack") {
-      const move = WEAPONS[this.run.core.weapon].combo[player.attackIndex];
-      const progress = clamp(player.attackTimer / player.attackDuration, 0, 1);
-      ctx.fillStyle = `${this.run.core.color}24`;
-      ctx.beginPath();
-      ctx.moveTo(player.x, player.y);
-      ctx.arc(player.x, player.y, move.range * player.stats.meleeRange, player.facing - move.arc / 2 + progress * 0.35, player.facing + move.arc / 2 + progress * 0.35);
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = this.run.core.color;
-      ctx.lineWidth = 5;
-      ctx.shadowColor = this.run.core.color;
-      ctx.shadowBlur = 15;
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, move.range * player.stats.meleeRange, player.facing - move.arc / 2 + progress * 0.35, player.facing + move.arc / 2 + progress * 0.35);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
+    const weaponPose = this.getHeldWeaponPose(time);
+    this.drawHeldWeapon(ctx, weaponPose);
     this.drawTechBall(ctx, player.x, player.y, player.radius, time, this.run.core.color, player.facing, player.action);
-    const weaponLength = this.run.core.weapon === "hammer" ? 48 : this.run.core.weapon === "twin" ? 36 : 43;
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.rotate(player.facing);
-    ctx.strokeStyle = this.run.core.color;
-    ctx.lineWidth = this.run.core.weapon === "hammer" ? 8 : 4;
-    ctx.shadowColor = this.run.core.color;
-    ctx.shadowBlur = 10;
-    ctx.beginPath(); ctx.moveTo(19, 0); ctx.lineTo(weaponLength, 0); ctx.stroke();
-    if (this.run.core.weapon === "twin") {
-      ctx.beginPath(); ctx.moveTo(17, 7); ctx.lineTo(34, 12); ctx.stroke();
+
+    const gripAngles = weaponPose.offhandAngle == null
+      ? [{ angle: weaponPose.angle, side: 0 }]
+      : [{ angle: weaponPose.angle, side: 5 }, { angle: weaponPose.offhandAngle, side: -5 }];
+    for (const grip of gripAngles) {
+      ctx.save();
+      ctx.translate(
+        player.x + Math.cos(grip.angle) * player.radius * 0.72 + Math.cos(grip.angle + Math.PI / 2) * grip.side,
+        player.y + Math.sin(grip.angle) * player.radius * 0.72 + Math.sin(grip.angle + Math.PI / 2) * grip.side,
+      );
+      ctx.fillStyle = "#dffeff";
+      ctx.strokeStyle = this.run.core.color;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = this.run.core.color;
+      ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.restore();
     }
-    if (this.run.core.weapon === "hammer") {
-      ctx.lineWidth = 11;
-      ctx.beginPath(); ctx.moveTo(weaponLength - 2, -10); ctx.lineTo(weaponLength - 2, 10); ctx.stroke();
-    }
-    ctx.restore();
+
     if (player.action === "block") {
       ctx.strokeStyle = player.parryTimer > 0 ? "#ffffff" : "#4df6ff";
       ctx.lineWidth = player.parryTimer > 0 ? 6 : 4;
@@ -1243,6 +1247,97 @@ export class Game {
       ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 12, 0, TAU); ctx.stroke();
     }
     ctx.globalAlpha = 1;
+  }
+
+  getHeldWeaponPose(time) {
+    const player = this.player;
+    let angle = player.facing + Math.sin(time * 2.2) * 0.035;
+    let offhandAngle = null;
+    const isTwin = this.run.core.weapon === "twin";
+    if (isTwin) {
+      angle = player.facing + 0.24 + Math.sin(time * 2.2) * 0.035;
+      offhandAngle = player.facing - 0.24 - Math.sin(time * 2.2) * 0.035;
+    }
+    if (player.action === "attack") {
+      const progress = clamp(player.attackTimer / Math.max(0.001, player.attackDuration), 0, 1);
+      const eased = progress < 0.5
+        ? 4 * progress * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+      if (isTwin) {
+        if (player.attackIndex === 0) {
+          angle = player.facing + lerp(-1.2, 0.82, eased);
+          offhandAngle = player.facing - 0.48;
+        } else if (player.attackIndex === 1) {
+          angle = player.facing + 0.48;
+          offhandAngle = player.facing + lerp(1.2, -0.82, eased);
+        } else {
+          angle = player.facing + lerp(-1.48, 1.08, eased);
+          offhandAngle = player.facing + lerp(1.48, -1.08, eased);
+        }
+      } else {
+        const swings = [
+          [-1.18, 0.78],
+          [0.96, -0.88],
+          [-1.48, 1.24],
+        ];
+        const [start, end] = swings[player.attackIndex] || swings[0];
+        angle = player.facing + lerp(start, end, eased);
+      }
+    } else if (player.action === "block") {
+      angle = player.facing + 1.28;
+      if (isTwin) offhandAngle = player.facing - 1.28;
+    } else if (player.action === "dash") {
+      angle = player.facing - 0.48;
+      if (isTwin) offhandAngle = player.facing + 0.48;
+    } else if (player.action === "skill") {
+      angle = player.facing + Math.sin(time * 18) * 0.12;
+      if (isTwin) offhandAngle = player.facing - Math.sin(time * 18) * 0.12;
+    }
+    return { angle, offhandAngle };
+  }
+
+  drawHeldWeapon(ctx, pose) {
+    const weapon = WEAPONS[this.run.core.weapon];
+    const image = this.images[weapon.id];
+    if (!image?.complete || !image.naturalWidth || !weapon.render) return;
+    const attackScale = this.player.action === "attack" && this.player.attackIndex === 2 ? 1.08 : 1;
+    const isAttacking = this.player.action === "attack";
+    const combo = this.player.attackIndex;
+    const primarySide = pose.offhandAngle == null ? 0 : 5;
+    if (isAttacking) {
+      const primaryActive = this.run.core.weapon !== "twin" || combo === 0 || combo === 2;
+      const offhandActive = pose.offhandAngle != null && (combo === 1 || combo === 2);
+      const primaryDirection = combo === 1 ? -1 : 1;
+      const offhandDirection = -1;
+      if (primaryActive) {
+        this.drawWeaponSprite(ctx, image, weapon, pose.angle - primaryDirection * 0.3, primarySide, 0.07, attackScale);
+        this.drawWeaponSprite(ctx, image, weapon, pose.angle - primaryDirection * 0.16, primarySide, 0.14, attackScale);
+      }
+      if (offhandActive) {
+        this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle - offhandDirection * 0.3, -5, 0.07, attackScale);
+        this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle - offhandDirection * 0.16, -5, 0.14, attackScale);
+      }
+    }
+    this.drawWeaponSprite(ctx, image, weapon, pose.angle, primarySide, 1, attackScale);
+    if (pose.offhandAngle != null) this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle, -5, 1, attackScale);
+  }
+
+  drawWeaponSprite(ctx, image, weapon, angle, sideOffset, alpha, scale) {
+    const { size, anchorX, anchorY, rotation } = weapon.render;
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    ctx.globalCompositeOperation = alpha < 1 ? "lighter" : "source-over";
+    ctx.translate(
+      this.player.x + Math.cos(angle + Math.PI / 2) * sideOffset,
+      this.player.y + Math.sin(angle + Math.PI / 2) * sideOffset,
+    );
+    ctx.rotate(angle);
+    ctx.scale(scale, scale);
+    ctx.rotate(rotation);
+    ctx.shadowColor = weapon.color;
+    ctx.shadowBlur = alpha < 1 ? 14 : 7;
+    ctx.drawImage(image, -anchorX * size, -anchorY * size, size, size);
+    ctx.restore();
   }
 
   drawTechBall(ctx, x, y, radius, time, color, facing, action) {
@@ -1301,6 +1396,21 @@ export class Game {
       if (effect.type === "ring") {
         const progress = 1 - alpha;
         ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.radius * progress, 0, TAU); ctx.stroke();
+      } else if (effect.type === "impact") {
+        const progress = 1 - alpha;
+        ctx.save();
+        ctx.translate(effect.x, effect.y);
+        ctx.rotate(effect.angle);
+        ctx.lineWidth = 2 + alpha * 3;
+        for (const offset of [-0.48, 0, 0.48]) {
+          ctx.beginPath();
+          ctx.moveTo(-effect.radius * 0.25, Math.sin(offset) * 8);
+          ctx.lineTo(effect.radius * (0.45 + progress * 0.55), Math.sin(offset) * effect.radius);
+          ctx.stroke();
+        }
+        ctx.globalAlpha *= 0.55;
+        ctx.beginPath(); ctx.arc(0, 0, effect.radius * progress, 0, TAU); ctx.stroke();
+        ctx.restore();
       } else if (["block", "enemySlash"].includes(effect.type)) {
         ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.type === "block" ? 55 : effect.radius, effect.angle - 0.8, effect.angle + 0.8); ctx.stroke();
       } else if (effect.type === "muzzle") {

@@ -8,12 +8,13 @@ export const GAME = Object.freeze({
   dashSpeed: 760,
   dashDuration: 0.17,
   dashCooldown: 1.15,
-  maxEnemies: 48,
+  maxEnemies: 32,
 });
 
 export const WEAPONS = Object.freeze({
   blade: {
     id: "blade", name: "弧光剑", color: "#4df6ff", asset: "assets/items/energy-sword.png",
+    render: { size: 122, anchorX: 0.17, anchorY: 0.8, rotation: 0.78 },
     description: "均衡的三段近战连击，第三击范围更大。",
     combo: [
       { duration: 0.3, activeStart: 0.1, activeEnd: 0.19, damage: 26, range: 92, arc: 1.7, knockback: 85 },
@@ -22,7 +23,8 @@ export const WEAPONS = Object.freeze({
     ],
   },
   twin: {
-    id: "twin", name: "相位双刃", color: "#c77dff",
+    id: "twin", name: "相位双刃", color: "#c77dff", asset: "assets/items/phase-blade.png",
+    render: { size: 104, anchorX: 0.14, anchorY: 0.83, rotation: 0.78 },
     description: "连击速度快，攻击时产生小幅位移。",
     combo: [
       { duration: 0.22, activeStart: 0.07, activeEnd: 0.14, damage: 19, range: 78, arc: 1.9, knockback: 55, lunge: 20 },
@@ -31,7 +33,8 @@ export const WEAPONS = Object.freeze({
     ],
   },
   hammer: {
-    id: "hammer", name: "动力锤", color: "#ffcc66",
+    id: "hammer", name: "动力锤", color: "#ffcc66", asset: "assets/items/power-hammer.png",
+    render: { size: 138, anchorX: 0.08, anchorY: 0.9, rotation: 0.78 },
     description: "前摇较长，拥有很强的削韧与击退。",
     combo: [
       { duration: 0.48, activeStart: 0.2, activeEnd: 0.3, damage: 40, range: 96, arc: 1.55, knockback: 190 },
@@ -56,12 +59,12 @@ export const CORES = Object.freeze({
   storm: {
     id: "storm", name: "相位球体", subtitle: "高速 · 连击",
     description: "装备相位双刃。主动技能进入短时超频。", color: "#b77dff",
-    weapon: "twin", skill: "overdrive", bonuses: { stamina: 12 },
+    weapon: "twin", skill: "overdrive", asset: "assets/items/phase-twin-blades.png", bonuses: { stamina: 12 },
   },
   bastion: {
     id: "bastion", name: "壁垒球体", subtitle: "重击 · 防御",
     description: "装备动力锤。主动技能生成应急护盾。", color: "#ffcc66",
-    weapon: "hammer", skill: "barrier", bonuses: { health: 24 },
+    weapon: "hammer", skill: "barrier", asset: "assets/items/power-hammer.png", bonuses: { health: 24 },
   },
 });
 
@@ -102,11 +105,11 @@ export const META_UPGRADES = Object.freeze([
 ]);
 
 export function getWaveProfile(elapsed) {
-  if (elapsed < 30) return { rate: 1.55, pool: ["chaser", "skitter"] };
-  if (elapsed < 70) return { rate: 1.18, pool: ["chaser", "skitter", "shooter"] };
-  if (elapsed < 115) return { rate: 0.92, pool: ["chaser", "skitter", "shooter", "brute"] };
-  if (elapsed < GAME.bossTime) return { rate: 0.72, pool: ["skitter", "shooter", "brute", "sentinel", "lancer"] };
-  return { rate: 0.9, pool: ["chaser", "shooter", "lancer"] };
+  if (elapsed < 30) return { rate: 2.45, pool: ["chaser", "skitter"] };
+  if (elapsed < 70) return { rate: 1.95, pool: ["chaser", "skitter", "shooter"] };
+  if (elapsed < 115) return { rate: 1.58, pool: ["chaser", "skitter", "shooter", "brute"] };
+  if (elapsed < GAME.bossTime) return { rate: 1.28, pool: ["skitter", "shooter", "brute", "sentinel", "lancer"] };
+  return { rate: 1.55, pool: ["chaser", "shooter", "lancer"] };
 }
 
 export function xpForLevel(level) {

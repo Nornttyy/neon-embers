@@ -1,4 +1,4 @@
-const CACHE_VERSION = "neon-embers-v2-action";
+const CACHE_VERSION = "neon-embers-v4-dual-audio";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -11,6 +11,9 @@ const APP_SHELL = [
   "./assets/items/energy-sword.png",
   "./assets/items/rail-pistol.png",
   "./assets/items/energy-core.png",
+  "./assets/items/power-hammer.png",
+  "./assets/items/phase-twin-blades.png",
+  "./assets/items/phase-blade.png",
   "./src/ad-service.js",
   "./src/audio.js",
   "./src/config.js",
