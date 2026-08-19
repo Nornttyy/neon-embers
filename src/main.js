@@ -58,12 +58,15 @@ const elements = {
   healthText: byId("health-text"),
   shieldFill: byId("shield-fill"),
   xpFill: byId("xp-fill"),
+  staminaText: byId("stamina-text"),
   hudLevel: byId("hud-level"),
   hudPhase: byId("hud-phase"),
   hudTime: byId("hud-time"),
   hudKills: byId("hud-kills"),
   hudScrap: byId("hud-scrap"),
+  hudAmmo: byId("hud-ammo"),
   dashFill: byId("dash-fill"),
+  skillFill: byId("skill-fill"),
   bossBar: byId("boss-bar"),
   bossName: byId("boss-name"),
   bossFill: byId("boss-fill"),
@@ -121,7 +124,7 @@ function renderCoreCards() {
     button.type = "button";
     button.style.setProperty("--card-color", core.color);
     button.innerHTML = `
-      <div class="core-icon" aria-hidden="true"></div>
+      ${core.asset ? `<img class="core-item-art" src="${core.asset}" alt="" />` : `<div class="core-icon" aria-hidden="true"></div>`}
       <span class="core-subtitle">${core.subtitle}</span>
       <h3>${core.name}</h3>
       <p>${core.description}</p>
@@ -152,7 +155,7 @@ function renderMeta() {
     button.className = "meta-buy";
     button.type = "button";
     button.disabled = level >= definition.max || profile.scrap < cost;
-    button.textContent = level >= definition.max ? "已满级" : `${cost} 零件`;
+    button.textContent = level >= definition.max ? "已满级" : `${cost} 核心能源`;
     button.addEventListener("click", () => {
       if (profile.scrap < cost || level >= definition.max) return;
       profile.scrap -= cost;
@@ -173,19 +176,23 @@ function renderHud(data) {
   elements.healthFill.style.width = `${Math.max(0, data.health / data.maxHealth * 100)}%`;
   elements.healthText.textContent = `${Math.ceil(data.health)} / ${Math.round(data.maxHealth)}`;
   elements.shieldFill.style.width = `${data.shieldMax ? Math.max(0, data.shield / data.shieldMax * 100) : 0}%`;
+  elements.staminaText.textContent = `体力 ${Math.ceil(data.shield)} / ${Math.round(data.shieldMax)}`;
   elements.xpFill.style.width = `${Math.max(0, data.xp / data.xpNeeded * 100)}%`;
   elements.hudPhase.textContent = data.phase;
   elements.hudTime.textContent = data.time;
   elements.hudKills.textContent = data.kills;
   elements.hudScrap.textContent = data.scrap;
+  elements.hudAmmo.textContent = data.reload > 0 ? "装填" : `${data.ammo}/${data.maxAmmo}`;
   elements.dashFill.style.width = `${data.dash * 100}%`;
+  elements.skillFill.style.width = `${data.skill * 100}%`;
 
-  const signature = data.weapons.map((weapon) => `${weapon.id}:${weapon.level}`).join("|");
+  const signature = data.weapons.map((weapon) => `${weapon.id}:${weapon.level}:${weapon.ammo || ""}`).join("|");
   if (elements.weaponDock.dataset.signature !== signature) {
     elements.weaponDock.dataset.signature = signature;
     elements.weaponDock.innerHTML = data.weapons.map((weapon) => `
       <div class="weapon-chip" style="--weapon-color:${weapon.color}" title="${weapon.name} · 等级 ${weapon.level}">
-        <b>${weapon.name.slice(0, 2)}</b><span>LV ${weapon.level}</span>
+        ${weapon.asset ? `<img src="${weapon.asset}" alt="" />` : `<b>${weapon.name.slice(0, 2)}</b>`}
+        <span>${weapon.ammo || `LV ${weapon.level}`}</span>
       </div>
     `).join("");
   }
@@ -208,12 +215,13 @@ function renderUpgradeChoices(choices) {
     button.type = "button";
     button.className = "upgrade-card";
     button.style.setProperty("--card-color", rarityColor[choice.rarity] || rarityColor.common);
+    button.disabled = game.run.energy < choice.cost;
     button.innerHTML = `
       <span class="rarity">${rarityLabel[choice.rarity] || rarityLabel.common}</span>
-      <div class="upgrade-symbol" aria-hidden="true"><i></i></div>
+      ${choice.asset ? `<img class="upgrade-art" src="${choice.asset}" alt="" />` : `<div class="upgrade-symbol" aria-hidden="true"><i></i></div>`}
       <h3>${choice.name}</h3>
       <p>${choice.description}</p>
-      <small>${choice.unlock ? "新武器" : `当前 ${currentLevel} / ${choice.max}`}</small>
+      <small>${choice.cost} 能源 · 当前 ${currentLevel} / ${choice.max}</small>
     `;
     button.addEventListener("click", () => game.chooseUpgrade(choice.id));
     elements.upgradeGrid.append(button);
@@ -232,8 +240,8 @@ function showResult(summary) {
   renderProfile();
 
   byId("result-kicker").textContent = summary.victory ? "RUN COMPLETE" : "SIGNAL LOST";
-  byId("result-title").textContent = summary.victory ? "协议完成" : "核心熄灭";
-  byId("result-subtitle").textContent = summary.victory ? "零号收割机已被清除。" : "回收已获得的数据，重新构筑。";
+  byId("result-title").textContent = summary.victory ? "训练完成" : "球体离线";
+  byId("result-subtitle").textContent = summary.victory ? "零号执行体已被清除。" : "已保存本次回收的核心能源。";
   byId("result-time").textContent = summary.timeText;
   byId("result-kills").textContent = summary.kills;
   byId("result-level").textContent = summary.level;
@@ -325,7 +333,7 @@ byId("reset-save-button").addEventListener("click", (event) => {
   if (now > resetArmedUntil) {
     resetArmedUntil = now + 3500;
     event.currentTarget.textContent = "再点一次确认重置";
-    showToast("该操作会清除零件与最高纪录");
+    showToast("该操作会清除核心能源与最高纪录");
     window.setTimeout(() => {
       if (Date.now() > resetArmedUntil) event.currentTarget.textContent = "重置本地进度";
     }, 3600);
@@ -394,6 +402,13 @@ function releaseJoystick(event) {
 joystickZone.addEventListener("pointerup", releaseJoystick);
 joystickZone.addEventListener("pointercancel", releaseJoystick);
 byId("touch-dash").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestDash(); });
+byId("touch-attack").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestAttack(); });
+byId("touch-ranged").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestRanged(); });
+byId("touch-skill").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestSkill(); });
+byId("touch-block").addEventListener("pointerdown", (event) => { event.preventDefault(); game.setBlocking(true); });
+for (const eventName of ["pointerup", "pointercancel", "pointerleave"]) {
+  byId("touch-block").addEventListener(eventName, () => game.setBlocking(false));
+}
 
 game.applySettings(profile.settings);
 renderCoreCards();

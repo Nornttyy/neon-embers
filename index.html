@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#060812" />
-    <meta name="description" content="霓虹余烬：一款六分钟一局的赛博生存肉鸽原型。" />
+    <meta name="description" content="霓虹余烬：操控科技小球近战、射击、闪避和招架的赛博动作肉鸽。" />
     <meta name="application-name" content="霓虹余烬" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="霓虹余烬" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="霓虹余烬 · Neon Embers" />
-    <meta property="og:description" content="六分钟一局的赛博生存肉鸽。移动、闪避，让武器协议自行失控。" />
+    <meta property="og:description" content="操控科技小球，使用近战、远程、闪避、格挡和技能通过训练场。" />
     <meta property="og:image" content="assets/icon-512.png" />
     <title>霓虹余烬 · Neon Embers</title>
     <link rel="manifest" href="manifest.webmanifest" />
@@ -27,42 +27,42 @@
 
       <section id="menu-screen" class="screen menu-screen is-active" aria-labelledby="game-title">
         <div class="menu-topline">
-          <span class="signal"><i></i> PROTOTYPE // 0.1</span>
+          <span class="signal"><i></i> ACTION SLICE // 0.2</span>
           <button class="icon-button" id="settings-button" type="button" aria-label="打开设置">⚙</button>
         </div>
 
         <div class="hero-panel">
-          <p class="eyebrow">NEXUS SURVIVAL PROTOCOL</p>
+          <p class="eyebrow">SPHERE COMBAT PROTOCOL</p>
           <h1 id="game-title"><span>霓虹</span>余烬</h1>
           <p class="latin-title">NEON EMBERS</p>
-          <p class="tagline">六分钟。一个核心。无限种失控的构筑。</p>
+          <p class="tagline">操控科技球体，主动攻击、闪避、格挡与招架。</p>
 
           <div class="menu-actions">
             <button class="primary-button" id="start-button" type="button">
-              <span>开始行动</span><small>选择你的初始核心</small>
+              <span>开始单机训练</span><small>选择科技球体的近战模块</small>
             </button>
-            <button class="secondary-button" id="meta-button" type="button">永久升级</button>
+            <button class="secondary-button" id="meta-button" type="button">核心能源升级</button>
             <button class="secondary-button" id="guide-button" type="button">新手教程</button>
           </div>
 
           <div class="profile-strip">
-            <div><span>回收零件</span><strong id="menu-scrap">0</strong></div>
+            <div><span>核心能源</span><strong id="menu-scrap">0</strong></div>
             <div><span>最高存活</span><strong id="menu-best-time">00:00</strong></div>
             <div><span>最高击杀</span><strong id="menu-best-kills">0</strong></div>
           </div>
         </div>
 
         <div class="feature-rail" aria-label="版本内容">
-          <span>6 种武器协议</span><span>31 项局内升级</span><span>6 分钟完整敌潮</span>
+          <span>3 种近战模块</span><span>轨道手枪副武器</span><span>格挡与精准招架</span>
         </div>
       </section>
 
       <section id="core-screen" class="screen panel-screen" aria-labelledby="core-title">
         <div class="panel-shell wide-panel">
           <button class="back-button" data-back="menu-screen" type="button">← 返回</button>
-          <p class="eyebrow">SELECT INITIAL PROTOCOL</p>
-          <h2 id="core-title">选择初始核心</h2>
-          <p class="panel-lead">核心只决定开局方向，局内仍可解锁其他武器。</p>
+          <p class="eyebrow">SELECT SPHERE LOADOUT</p>
+          <h2 id="core-title">选择科技球体</h2>
+          <p class="panel-lead">三种球体使用不同近战节奏，全部配备轨道手枪。</p>
           <div id="core-grid" class="core-grid"></div>
         </div>
       </section>
@@ -71,8 +71,8 @@
         <div class="panel-shell">
           <button class="back-button" data-back="menu-screen" type="button">← 返回</button>
           <p class="eyebrow">PERSISTENT CALIBRATION</p>
-          <h2 id="meta-title">永久升级</h2>
-          <div class="currency-line">可用零件 <strong id="meta-scrap">0</strong></div>
+          <h2 id="meta-title">核心能源升级</h2>
+          <div class="currency-line">可用核心能源 <strong id="meta-scrap">0</strong></div>
           <div id="meta-grid" class="meta-grid"></div>
           <p class="fine-print">永久成长设有上限，主要帮助熟悉流程，不替代局内构筑。</p>
         </div>
@@ -81,15 +81,16 @@
       <section id="guide-screen" class="screen panel-screen" aria-labelledby="guide-title">
         <div class="panel-shell guide-panel">
           <button class="back-button" data-back="menu-screen" type="button">← 返回</button>
-          <p class="eyebrow">FIELD MANUAL // 45 SEC</p>
-          <h2 id="guide-title">活下来，只需三件事</h2>
+          <p class="eyebrow">ACTION TRAINING // 60 SEC</p>
+          <h2 id="guide-title">先学会主动战斗</h2>
           <div class="guide-grid">
-            <article><b>01</b><div><h3>保持移动</h3><p>使用 WASD 或方向键移动。移动端拖动左侧摇杆。</p></div></article>
-            <article><b>02</b><div><h3>自动攻击</h3><p>武器会自动锁定附近威胁。你只负责走位和构筑。</p></div></article>
-            <article><b>03</b><div><h3>关键闪避</h3><p>按空格键或触屏闪避键，短距离折跃并获得短暂无敌。</p></div></article>
+            <article><b>01</b><div><h3>移动与瞄准</h3><p>WASD 移动，鼠标控制朝向；触屏攻击会朝向附近敌人。</p></div></article>
+            <article><b>02</b><div><h3>三段近战</h3><p>连续点击左键或按 J。不同球体拥有不同速度、范围和击退。</p></div></article>
+            <article><b>03</b><div><h3>格挡与招架</h3><p>按住右键或 K 正面格挡。攻击命中前一瞬开始格挡可精准招架。</p></div></article>
+            <article><b>04</b><div><h3>闪避、远程与技能</h3><p>空格闪避，Q 发射轨道手枪，E 使用球体主动技能。</p></div></article>
           </div>
-          <div class="guide-tip"><span>升级三选一</span>拾取青色经验，升级时战斗自动暂停。优先让已有武器形成流派。</div>
-          <button class="primary-button compact" id="guide-start-button" type="button"><span>明白，选择核心</span></button>
+          <div class="guide-tip"><span>能源购买</span>击败敌人收集战术能源。终端开启后，选择并购买一项装备强化。</div>
+          <button class="primary-button compact" id="guide-start-button" type="button"><span>明白，选择球体</span></button>
         </div>
       </section>
 
@@ -110,30 +111,34 @@
           <div class="level-badge"><small>LV</small><strong id="hud-level">1</strong></div>
           <div class="bar-stack">
             <div class="bar health-bar"><i id="health-fill"></i><span id="health-text">100 / 100</span></div>
-            <div class="bar shield-bar"><i id="shield-fill"></i></div>
+            <div class="bar shield-bar"><i id="shield-fill"></i><span id="stamina-text">体力 100 / 100</span></div>
             <div class="bar xp-bar"><i id="xp-fill"></i></div>
           </div>
         </div>
         <div class="hud-objective">
           <span id="hud-phase">敌潮 01</span>
           <strong id="hud-time">06:00</strong>
-          <small id="hud-objective">撑过收割协议</small>
+          <small id="hud-objective-text">击败敌人，收集能源</small>
         </div>
         <div class="hud-top-right">
           <div><span>击杀</span><strong id="hud-kills">0</strong></div>
-          <div><span>零件</span><strong id="hud-scrap">0</strong></div>
+          <div><span>战术能源</span><strong id="hud-scrap">0</strong></div>
+          <div><span>手枪弹药</span><strong id="hud-ammo">6/6</strong></div>
           <button id="pause-button" class="hud-pause" type="button" aria-label="暂停">Ⅱ</button>
         </div>
         <div id="weapon-dock" class="weapon-dock"></div>
-        <div class="dash-indicator"><span>闪避</span><i><b id="dash-fill"></b></i><kbd>SPACE</kbd></div>
+        <div class="action-indicators">
+          <div class="dash-indicator"><span>闪避</span><i><b id="dash-fill"></b></i><kbd>SPACE</kbd></div>
+          <div class="skill-indicator"><span>技能</span><i><b id="skill-fill"></b></i><kbd>E</kbd></div>
+        </div>
         <div id="boss-bar" class="boss-bar"><span id="boss-name">零号收割机</span><i><b id="boss-fill"></b></i></div>
       </section>
 
       <section id="upgrade-screen" class="screen game-overlay" aria-labelledby="upgrade-title">
         <div class="upgrade-shell">
-          <p class="eyebrow">PROTOCOL EVOLUTION</p>
-          <h2 id="upgrade-title">选择一项升级</h2>
-          <p class="panel-lead">时间已冻结。让这套构筑继续失控。</p>
+          <p class="eyebrow">ENERGY TERMINAL</p>
+          <h2 id="upgrade-title">购买一项闯关装备</h2>
+          <p class="panel-lead">战斗已暂停。每件物品都会消耗当前战术能源。</p>
           <div id="upgrade-grid" class="upgrade-grid"></div>
           <button id="reroll-button" class="text-button" type="button">本局免费刷新 <span id="reroll-count">1</span></button>
         </div>
@@ -158,7 +163,7 @@
             <div><span>存活时间</span><strong id="result-time">00:00</strong></div>
             <div><span>击杀</span><strong id="result-kills">0</strong></div>
             <div><span>等级</span><strong id="result-level">1</strong></div>
-            <div class="accent-stat"><span>回收零件</span><strong id="result-scrap">0</strong></div>
+            <div class="accent-stat"><span>核心能源</span><strong id="result-scrap">0</strong></div>
           </div>
           <div class="result-actions">
             <button class="primary-button compact" id="again-button" type="button"><span>再次行动</span></button>
@@ -170,7 +175,13 @@
 
       <div id="touch-controls" class="touch-controls" aria-hidden="true">
         <div id="joystick-zone" class="joystick-zone"><i id="joystick-knob"></i></div>
-        <button id="touch-dash" class="touch-dash" type="button"><span>闪避</span></button>
+        <div class="touch-actions">
+          <button id="touch-skill" class="touch-action touch-skill" type="button">技能</button>
+          <button id="touch-ranged" class="touch-action touch-ranged" type="button">远程</button>
+          <button id="touch-block" class="touch-action touch-block" type="button">格挡</button>
+          <button id="touch-dash" class="touch-action touch-dash" type="button">闪避</button>
+          <button id="touch-attack" class="touch-action touch-attack" type="button">攻击</button>
+        </div>
       </div>
 
       <div id="toast" class="toast" role="status" aria-live="polite"></div>

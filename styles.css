@@ -313,6 +313,7 @@ h1 span { color: var(--cyan); }
 .core-icon::before, .core-icon::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--card-color); transform: rotate(45deg); box-shadow: 0 0 22px color-mix(in srgb, var(--card-color) 38%, transparent); }
 .core-icon::after { inset: 15px; background: var(--card-color); }
 .core-card h3 { margin-bottom: 6px; font-size: 21px; }
+.core-item-art { width: 76px; height: 76px; margin: -6px 0 17px; object-fit: contain; filter: drop-shadow(0 0 13px color-mix(in srgb, var(--card-color) 50%, transparent)); }
 .core-card .core-subtitle { color: var(--card-color); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
 .core-card p { color: var(--muted); font-size: 13px; line-height: 1.55; }
 .core-card .select-label { position: absolute; bottom: 18px; font-size: 11px; font-weight: 800; color: var(--card-color); }
@@ -368,7 +369,8 @@ h1 span { color: var(--cyan); }
 .bar i { display: block; width: 100%; height: 100%; transition: width .16s linear; }
 .bar span { position: absolute; inset: 0; display: grid; place-items: center; color: white; font-size: 9px; font-weight: 800; text-shadow: 0 1px 3px #000; }
 .health-bar i { background: linear-gradient(90deg, #ff427d, #ff766f); }
-.shield-bar { height: 7px; }.shield-bar i { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+.shield-bar { height: 13px; }.shield-bar i { background: linear-gradient(90deg, #38b9ff, var(--cyan)); box-shadow: 0 0 10px var(--cyan); }
+.shield-bar span { font-size: 7px; letter-spacing: .04em; }
 .xp-bar { height: 7px; }.xp-bar i { background: linear-gradient(90deg, var(--purple), var(--cyan)); }
 .hud-objective { position: absolute; top: 18px; left: 50%; min-width: 190px; transform: translateX(-50%); text-align: center; }
 .hud-objective span { display: block; color: var(--cyan); font-size: 9px; font-weight: 850; letter-spacing: .2em; }
@@ -378,11 +380,15 @@ h1 span { color: var(--cyan); }
 .hud-top-right strong { font-size: 17px; }
 .hud-pause { font-weight: 900; }
 .weapon-dock { position: absolute; left: 24px; bottom: 24px; display: flex; gap: 7px; }
-.weapon-chip { width: 56px; height: 52px; padding: 7px; border: 1px solid rgba(100,190,220,.17); background: rgba(4,10,22,.78); clip-path: polygon(0 0, 80% 0, 100% 20%, 100% 100%, 0 100%); }
+.weapon-chip { position: relative; width: 64px; height: 58px; padding: 6px; border: 1px solid rgba(100,190,220,.17); background: rgba(4,10,22,.78); clip-path: polygon(0 0, 80% 0, 100% 20%, 100% 100%, 0 100%); }
 .weapon-chip b { display: block; color: var(--weapon-color); font-size: 11px; }
-.weapon-chip span { display: block; margin-top: 5px; color: var(--muted); font-size: 8px; }
-.dash-indicator { position: absolute; right: 24px; bottom: 27px; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 9px; font-weight: 800; }
-.dash-indicator i { width: 76px; height: 5px; background: rgba(255,255,255,.09); }.dash-indicator b { display: block; width: 100%; height: 100%; background: var(--cyan); }
+.weapon-chip img { width: 38px; height: 38px; display: block; margin: -3px auto 0; object-fit: contain; filter: drop-shadow(0 0 7px var(--weapon-color)); }
+.weapon-chip span { position: absolute; right: 5px; bottom: 4px; display: block; color: #dcecff; font-size: 8px; font-weight: 850; text-shadow: 0 1px 3px #000; }
+.action-indicators { position: absolute; right: 24px; bottom: 27px; display: grid; gap: 7px; }
+.dash-indicator, .skill-indicator { display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--muted); font-size: 9px; font-weight: 800; }
+.dash-indicator i, .skill-indicator i { width: 76px; height: 5px; background: rgba(255,255,255,.09); }
+.dash-indicator b, .skill-indicator b { display: block; width: 100%; height: 100%; background: var(--cyan); }
+.skill-indicator b { background: var(--purple); }
 kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgba(0,0,0,.35); color: #9cb1c4; font: inherit; }
 .boss-bar { position: absolute; left: 50%; bottom: 28px; width: min(460px, 50vw); transform: translateX(-50%); display: none; text-align: center; }
 .boss-bar.is-active { display: block; }
@@ -393,9 +399,12 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
 .upgrade-shell { width: min(1020px, 100%); text-align: center; }
 .upgrade-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 26px 0 14px; text-align: left; }
 .upgrade-card { min-height: 230px; }
+.upgrade-card:disabled { opacity: .46; cursor: not-allowed; filter: saturate(.5); }
+.upgrade-card:disabled:hover { transform: none; border-color: var(--line); box-shadow: none; }
 .upgrade-card .rarity { color: var(--card-color); font-size: 9px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
 .upgrade-card .upgrade-symbol { width: 44px; height: 44px; margin: 20px 0; border: 1px solid var(--card-color); transform: rotate(45deg); display: grid; place-items: center; box-shadow: inset 0 0 18px color-mix(in srgb, var(--card-color) 12%, transparent), 0 0 18px color-mix(in srgb, var(--card-color) 14%, transparent); }
 .upgrade-card .upgrade-symbol i { width: 15px; height: 15px; background: var(--card-color); }
+.upgrade-art { width: 70px; height: 70px; margin: 9px 0 8px; object-fit: contain; filter: drop-shadow(0 0 12px color-mix(in srgb, var(--card-color) 56%, transparent)); }
 .upgrade-card h3 { margin-bottom: 8px; font-size: 19px; }
 .upgrade-card p { color: var(--muted); font-size: 12px; line-height: 1.6; }
 .upgrade-card small { position: absolute; left: 23px; bottom: 17px; color: #70879c; }
@@ -412,10 +421,17 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
 .result-actions { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; }
 
 .touch-controls { display: none; position: absolute; inset: 0; z-index: 8; pointer-events: none; }
-.joystick-zone, .touch-dash { pointer-events: auto; touch-action: none; }
+.joystick-zone, .touch-action { pointer-events: auto; touch-action: none; }
 .joystick-zone { position: absolute; left: max(28px, env(safe-area-inset-left)); bottom: max(30px, env(safe-area-inset-bottom)); width: 118px; height: 118px; border: 1px solid rgba(77,246,255,.22); border-radius: 50%; background: rgba(3,10,23,.35); }
 .joystick-zone i { position: absolute; left: 37px; top: 37px; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--cyan); background: rgba(77,246,255,.14); box-shadow: 0 0 20px rgba(77,246,255,.16); }
-.touch-dash { position: absolute; right: max(32px, env(safe-area-inset-right)); bottom: max(42px, env(safe-area-inset-bottom)); width: 86px; height: 86px; border-radius: 50%; border: 1px solid rgba(183,125,255,.55); background: rgba(92,55,150,.3); color: #d9c7ff; font-size: 12px; font-weight: 850; }
+.touch-actions { position: absolute; right: max(18px, env(safe-area-inset-right)); bottom: max(22px, env(safe-area-inset-bottom)); width: 210px; height: 175px; }
+.touch-action { position: absolute; display: grid; place-items: center; width: 58px; height: 58px; padding: 0; border-radius: 50%; border: 1px solid rgba(183,125,255,.55); background: rgba(25,21,58,.68); color: #e4d9ff; font-size: 10px; font-weight: 850; box-shadow: 0 8px 22px rgba(0,0,0,.25); }
+.touch-action:active { transform: scale(.92); border-color: white; }
+.touch-attack { right: 0; bottom: 22px; width: 78px; height: 78px; border-color: rgba(77,246,255,.72); background: rgba(20,105,123,.48); color: #caffff; font-size: 13px; }
+.touch-dash { right: 78px; bottom: 0; }
+.touch-block { right: 79px; bottom: 64px; border-color: rgba(77,246,255,.48); }
+.touch-ranged { right: 12px; bottom: 105px; border-color: rgba(183,125,255,.7); }
+.touch-skill { right: 141px; bottom: 91px; width: 52px; height: 52px; border-color: rgba(255,204,102,.68); color: #ffe4a3; }
 
 .toast { position: absolute; z-index: 50; left: 50%; bottom: 90px; transform: translate(-50%, 18px); padding: 10px 15px; border: 1px solid var(--line); background: rgba(5,12,24,.92); color: var(--cyan-soft); opacity: 0; pointer-events: none; transition: .2s ease; font-size: 12px; }
 .toast.is-active { opacity: 1; transform: translate(-50%, 0); }
@@ -445,7 +461,7 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
   .weapon-dock { left: 50%; bottom: 15px; transform: translateX(-50%); }
   .weapon-chip { width: 42px; height: 39px; padding: 5px; }
   .weapon-chip span { display: none; }
-  .dash-indicator { display: none; }
+  .action-indicators { display: none; }
   .boss-bar { bottom: 72px; width: 70vw; }
   .touch-controls.is-active { display: block; }
   .result-stats { grid-template-columns: repeat(2, 1fr); }

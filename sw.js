@@ -1,4 +1,4 @@
-const CACHE_VERSION = "neon-embers-v1";
+const CACHE_VERSION = "neon-embers-v2-action";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,6 +8,9 @@ const APP_SHELL = [
   "./assets/icon-192.png",
   "./assets/icon-512.png",
   "./assets/icon-maskable-512.png",
+  "./assets/items/energy-sword.png",
+  "./assets/items/rail-pistol.png",
+  "./assets/items/energy-core.png",
   "./src/ad-service.js",
   "./src/audio.js",
   "./src/config.js",
