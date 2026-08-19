@@ -787,29 +787,32 @@ export class Game {
   damageEnemy(enemy, amount, kind = "melee", direction = null, knockback = 0) {
     if (!enemy || enemy.dead) return;
     enemy.hp -= amount;
-    enemy.hitFlash = 1;
+    const meleeImpact = kind === "melee";
+    const heavyImpact = meleeImpact && (this.player.attackIndex === 2 || enemy.elite || enemy.boss);
+    enemy.hitFlash = heavyImpact ? 1.35 : 1;
     if (direction && knockback) {
       enemy.pushX += direction.x * knockback;
       enemy.pushY += direction.y * knockback;
     }
-    this.damageTexts.push({ x: enemy.x, y: enemy.y - enemy.radius, text: String(Math.round(amount)), color: kind === "rail" ? "#c9a6ff" : "#bfffff", life: 0.65, maxLife: 0.65 });
+    this.damageTexts.push({ x: enemy.x, y: enemy.y - enemy.radius, text: String(Math.round(amount)), color: kind === "rail" ? "#c9a6ff" : "#bfffff", life: 0.65, maxLife: 0.65, heavy: heavyImpact });
     if (direction) {
       this.effects.push({
         type: "impact",
         x: enemy.x,
         y: enemy.y,
         angle: Math.atan2(direction.y, direction.x),
-        radius: enemy.boss ? 34 : 22,
-        life: kind === "melee" ? 0.22 : 0.16,
-        maxLife: kind === "melee" ? 0.22 : 0.16,
+        radius: enemy.boss ? 48 : heavyImpact ? 36 : meleeImpact ? 28 : 22,
+        life: heavyImpact ? 0.28 : meleeImpact ? 0.23 : 0.16,
+        maxLife: heavyImpact ? 0.28 : meleeImpact ? 0.23 : 0.16,
         color: kind === "rail" ? "#b77dff" : this.run.core.color,
+        heavy: heavyImpact,
       });
     }
-    this.spawnBurst(enemy.x, enemy.y, kind === "rail" ? "#b77dff" : "#4df6ff", enemy.boss ? 8 : 4, 110);
-    this.shake = Math.max(this.shake, kind === "melee" ? 3.5 : 2);
+    this.spawnBurst(enemy.x, enemy.y, kind === "rail" ? "#b77dff" : "#4df6ff", enemy.boss ? 14 : heavyImpact ? 10 : meleeImpact ? 7 : 4, heavyImpact ? 175 : meleeImpact ? 145 : 110);
+    this.shake = Math.max(this.shake, heavyImpact ? 7 : meleeImpact ? 5 : 2.5);
     const weaponKind = kind === "melee" ? this.run.core.weapon : kind;
     audio.hit(weaponKind, {
-      heavy: kind === "melee" && (this.player.attackIndex === 2 || enemy.elite || enemy.boss),
+      heavy: heavyImpact,
       killed: enemy.hp <= 0,
     });
     if (enemy.hp <= 0) this.killEnemy(enemy);
@@ -1519,8 +1522,9 @@ export class Game {
         ctx.save();
         ctx.translate(effect.x, effect.y);
         ctx.rotate(effect.angle);
-        ctx.lineWidth = 2 + alpha * 3;
-        for (const offset of [-0.48, 0, 0.48]) {
+        ctx.lineWidth = (effect.heavy ? 3 : 2) + alpha * (effect.heavy ? 5 : 3);
+        const offsets = effect.heavy ? [-0.62, -0.28, 0, 0.28, 0.62] : [-0.48, 0, 0.48];
+        for (const offset of offsets) {
           ctx.beginPath();
           ctx.moveTo(-effect.radius * 0.25, Math.sin(offset) * 8);
           ctx.lineTo(effect.radius * (0.45 + progress * 0.55), Math.sin(offset) * effect.radius);
@@ -1541,8 +1545,8 @@ export class Game {
 
   renderDamageTexts(ctx) {
     ctx.textAlign = "center";
-    ctx.font = "800 13px ui-sans-serif, system-ui";
     for (const text of this.damageTexts) {
+      ctx.font = `${text.heavy ? 950 : 800} ${text.heavy ? 17 : 13}px ui-sans-serif, system-ui`;
       ctx.globalAlpha = clamp(text.life / text.maxLife, 0, 1);
       ctx.fillStyle = text.color;
       ctx.fillText(text.text, text.x, text.y);
