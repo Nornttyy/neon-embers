@@ -14,7 +14,7 @@ export class AudioEngine {
     this.musicStep = 0;
     this.musicNextTime = 0;
     this.musicTimer = 0;
-    this.sampleBuffers = { bladeSlice: [], bodyHit: [], heavyHit: [], metalBlock: [], mechanism: [] };
+    this.sampleBuffers = { swingWhoosh: [], bulletImpact: [], bodyHit: [], heavyHit: [], metalBlock: [], mechanism: [] };
     this.sampleLastIndex = {};
     this.sampleLoadPromise = null;
     this.sampleVoices = 0;
@@ -125,7 +125,8 @@ export class AudioEngine {
     if (!this.context) return Promise.resolve();
     if (this.sampleLoadPromise) return this.sampleLoadPromise;
     const files = {
-      bladeSlice: ["blade-slice-1.ogg", "blade-slice-2.ogg"],
+      swingWhoosh: ["swing-whoosh-1.wav", "swing-whoosh-2.wav"],
+      bulletImpact: ["bullet-impact.wav"],
       bodyHit: ["body-hit-1.ogg", "body-hit-2.ogg", "body-hit-3.ogg"],
       heavyHit: ["heavy-hit-1.ogg", "heavy-hit-2.ogg"],
       metalBlock: ["metal-block-1.ogg", "metal-block-2.ogg"],
@@ -144,7 +145,7 @@ export class AudioEngine {
     return this.sampleLoadPromise;
   }
 
-  playSample(group, { gain = 0.45, rate = 1, variance = 0.035, delay = 0 } = {}) {
+  playSample(group, { gain = 0.45, rate = 1, variance = 0.035, delay = 0, maxDuration = 0.72 } = {}) {
     if (!this.enabled || !this.context || !this.sfxBus || this.sampleVoices >= 6) return false;
     const buffers = this.sampleBuffers[group];
     if (!buffers?.length) return false;
@@ -156,13 +157,15 @@ export class AudioEngine {
     const now = this.context.currentTime + delay;
     source.buffer = buffers[index];
     source.playbackRate.value = Math.max(0.72, rate + (Math.random() * 2 - 1) * variance);
+    const audibleDuration = Math.min(source.buffer.duration / source.playbackRate.value, maxDuration);
+    const bufferDuration = Math.min(source.buffer.duration, audibleDuration * source.playbackRate.value);
     envelope.gain.setValueAtTime(gain, now);
-    envelope.gain.exponentialRampToValueAtTime(0.0001, now + Math.min(source.buffer.duration / source.playbackRate.value, 0.72));
+    envelope.gain.exponentialRampToValueAtTime(0.0001, now + audibleDuration);
     source.connect(envelope);
     envelope.connect(this.sfxBus);
     this.sampleVoices += 1;
     source.addEventListener("ended", () => { this.sampleVoices = Math.max(0, this.sampleVoices - 1); }, { once: true });
-    source.start(now);
+    source.start(now, 0, bufferDuration);
     return true;
   }
 
@@ -182,63 +185,54 @@ export class AudioEngine {
 
   melee(kind = "blade", combo = 0) {
     const finish = combo === 2;
-    if (kind === "hammer") {
-      this.noiseSweep({ duration: finish ? 0.2 : 0.145, gain: finish ? 0.07 : 0.05, startFrequency: 720, endFrequency: 190, type: "lowpass", q: 0.35, attack: 0.025 });
-      this.tone({ frequency: finish ? 125 : 154, endFrequency: 64, duration: finish ? 0.15 : 0.1, type: "sine", gain: finish ? 0.045 : 0.03 });
-      return;
-    }
+    const hammer = kind === "hammer";
     const twin = kind === "twin";
-    const sampled = this.playSample("bladeSlice", {
-      gain: finish ? 0.29 : twin ? 0.2 : 0.24,
-      rate: (twin ? 1.14 : 1.02) + combo * 0.035,
-      variance: 0.02,
+    const sampled = this.playSample("swingWhoosh", {
+      gain: finish ? 0.3 : hammer ? 0.27 : twin ? 0.22 : 0.25,
+      rate: (hammer ? 0.76 : twin ? 1.28 : 1.12) + combo * 0.04,
+      variance: 0.025,
+      maxDuration: finish ? 0.3 : hammer ? 0.27 : twin ? 0.18 : 0.22,
     });
     if (!sampled) this.noiseSweep({
-      duration: finish ? 0.145 : 0.095,
-      gain: finish ? 0.06 : 0.042,
-      startFrequency: twin ? 1650 : 1320,
-      endFrequency: twin ? 520 : 410,
-      type: "bandpass",
-      q: 0.42,
-      attack: 0.018,
+      duration: finish ? 0.16 : hammer ? 0.14 : 0.1,
+      gain: finish ? 0.06 : hammer ? 0.05 : 0.042,
+      startFrequency: hammer ? 760 : twin ? 1680 : 1380,
+      endFrequency: hammer ? 210 : twin ? 480 : 380,
+      type: hammer ? "lowpass" : "bandpass",
+      q: 0.38,
+      attack: 0.014,
     });
-    this.tone({ frequency: twin ? 540 : 430, endFrequency: 260, duration: 0.055, type: "sine", gain: 0.012 });
+    this.tone({ frequency: hammer ? 210 : twin ? 480 : 390, endFrequency: hammer ? 82 : 240, duration: hammer ? 0.08 : 0.045, type: "sine", gain: 0.01 });
   }
 
-  hit(kind = "blade", { heavy = false, killed = false } = {}) {
+  hit(kind = "blade", { heavy = false } = {}) {
     const now = performance.now();
     if (now - this.lastHitAt < 28) return;
     this.lastHitAt = now;
     const ranged = kind === "rail" || kind === "reflect";
-    if (ranged) {
-      this.noise({ duration: 0.045, gain: 0.065, frequency: 2900, type: "highpass", q: 0.5, attack: 0.001 });
-      this.tone({ frequency: 280, endFrequency: 76, duration: 0.075, type: "square", gain: 0.075 });
-      return;
-    }
-
     const hammer = kind === "hammer";
     const weight = heavy ? 1.12 : 1;
-    const sampled = this.playSample(hammer || heavy ? "heavyHit" : "bodyHit", {
-      gain: (hammer ? 0.62 : heavy ? 0.56 : 0.48) * weight,
-      rate: hammer ? 0.82 : heavy ? 0.92 : 1.02,
-      variance: 0.03,
+    const sampled = this.playSample("bulletImpact", {
+      gain: (hammer ? 0.62 : heavy ? 0.58 : ranged ? 0.54 : 0.52) * weight,
+      rate: hammer ? 0.84 : heavy ? 0.92 : ranged ? 1.06 : 1,
+      variance: 0.035,
+      maxDuration: 0.18,
     });
     if (!sampled) this.noise({
-      duration: hammer ? 0.1 : 0.06,
-      gain: (hammer ? 0.12 : 0.09) * weight,
-      frequency: hammer ? 320 : 520,
-      type: "lowpass",
-      q: 0.4,
+      duration: 0.045,
+      gain: 0.08 * weight,
+      frequency: ranged ? 2100 : 1100,
+      type: "bandpass",
+      q: 0.5,
       attack: 0.001,
     });
     this.tone({
-      frequency: hammer ? 98 : heavy ? 122 : 148,
-      endFrequency: hammer ? 38 : heavy ? 52 : 66,
-      duration: hammer ? 0.16 : heavy ? 0.11 : 0.075,
+      frequency: hammer ? 98 : heavy ? 122 : ranged ? 185 : 154,
+      endFrequency: hammer ? 38 : heavy ? 52 : ranged ? 72 : 66,
+      duration: hammer ? 0.14 : heavy ? 0.1 : 0.065,
       type: "sine",
-      gain: hammer ? 0.1 : heavy ? 0.075 : 0.052,
+      gain: hammer ? 0.085 : heavy ? 0.065 : 0.04,
     });
-    if (killed) this.noise({ duration: 0.035, gain: 0.025, frequency: 1800, type: "highpass", q: 0.35, attack: 0.001, delay: 0.01 });
   }
 
   guard(perfect = false) {

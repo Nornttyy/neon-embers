@@ -2,6 +2,26 @@ import { CORES, ENEMIES, GAME, UPGRADES, WEAPONS, getWaveProfile, xpForLevel } f
 import { audio } from "./audio.js";
 
 const TAU = Math.PI * 2;
+const ENEMY_SPRITES = Object.freeze({
+  chaser: "enemyMelee",
+  skitter: "enemyMelee",
+  lancer: "enemyMelee",
+  shooter: "enemyRanged",
+  brute: "enemyBrute",
+  sentinel: "enemyShield",
+  elite: "enemyElite",
+  boss: "enemyBoss",
+});
+const ENEMY_SPRITE_SCALE = Object.freeze({
+  chaser: 2.9,
+  skitter: 3.05,
+  lancer: 3,
+  shooter: 3,
+  brute: 2.75,
+  sentinel: 3.1,
+  elite: 3,
+  boss: 2.65,
+});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (a, b, amount) => a + (b - a) * amount;
 const distanceSquared = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
@@ -54,6 +74,14 @@ export class Game {
       hammer: WEAPONS.hammer.asset,
       pistol: WEAPONS.rail.asset,
       energy: "assets/items/energy-core.png",
+      enemyMelee: "assets/enemies/melee-drone.png",
+      enemyRanged: "assets/enemies/ranged-drone.png",
+      enemyBrute: "assets/enemies/brute-drone.png",
+      enemyShield: "assets/enemies/shield-drone.png",
+      enemyElite: "assets/enemies/elite-drone.png",
+      enemyBoss: "assets/enemies/boss-drone.png",
+      terminal: "assets/world/energy-terminal.png",
+      pylon: "assets/world/arena-pylon.png",
     })) {
       const image = new Image();
       image.src = path;
@@ -303,6 +331,7 @@ export class Game {
       y: (index * 613.37) % GAME.height,
       size: 2 + (index % 5),
       kind: index % 4,
+      prop: index % 13 === 0,
     }));
     this.camera.x = this.player.x;
     this.camera.y = this.player.y;
@@ -1193,6 +1222,17 @@ export class Game {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GAME.width, y); ctx.stroke();
     }
     for (const decoration of this.decorations) {
+      if (decoration.prop && this.images.pylon.complete && this.images.pylon.naturalWidth) {
+        const width = 68 + decoration.kind * 6;
+        const height = width * this.images.pylon.naturalHeight / this.images.pylon.naturalWidth;
+        ctx.save();
+        ctx.translate(decoration.x, decoration.y);
+        ctx.shadowColor = decoration.kind % 2 ? "rgba(183,125,255,.34)" : "rgba(77,246,255,.3)";
+        ctx.shadowBlur = 10;
+        ctx.drawImage(this.images.pylon, -width / 2, -height / 2, width, height);
+        ctx.restore();
+        continue;
+      }
       ctx.fillStyle = decoration.kind === 0 ? "rgba(77,246,255,.15)" : "rgba(183,125,255,.08)";
       ctx.fillRect(decoration.x, decoration.y, decoration.size * 2.6, decoration.size);
     }
@@ -1256,23 +1296,34 @@ export class Game {
     }
     ctx.shadowColor = enemy.color;
     ctx.shadowBlur = enemy.elite || enemy.boss ? 14 : 0;
-    ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : "#12172a";
-    ctx.strokeStyle = enemy.color;
-    ctx.lineWidth = enemy.elite || enemy.boss ? 4 : 2;
-    ctx.beginPath();
-    const sides = enemy.boss ? 8 : enemy.ranged ? 6 : 4;
-    for (let index = 0; index < sides; index += 1) {
-      const angle = index / sides * TAU;
-      const radius = enemy.radius * (index % 2 ? 0.88 : 1);
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    const sprite = this.images[ENEMY_SPRITES[enemy.id]];
+    if (sprite?.complete && sprite.naturalWidth) {
+      const width = enemy.radius * (ENEMY_SPRITE_SCALE[enemy.id] || 2.9);
+      const height = width * sprite.naturalHeight / sprite.naturalWidth;
+      if (enemy.hitFlash > 0) ctx.filter = "brightness(2.1) saturate(.35)";
+      else if (enemy.id === "skitter") ctx.filter = "hue-rotate(-18deg) brightness(1.08)";
+      else if (enemy.id === "lancer") ctx.filter = "hue-rotate(20deg) saturate(1.2)";
+      ctx.drawImage(sprite, -width / 2, -height / 2, width, height);
+      ctx.filter = "none";
+    } else {
+      ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : "#12172a";
+      ctx.strokeStyle = enemy.color;
+      ctx.lineWidth = enemy.elite || enemy.boss ? 4 : 2;
+      ctx.beginPath();
+      const sides = enemy.boss ? 8 : enemy.ranged ? 6 : 4;
+      for (let index = 0; index < sides; index += 1) {
+        const angle = index / sides * TAU;
+        const radius = enemy.radius * (index % 2 ? 0.88 : 1);
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = enemy.color;
+      ctx.globalAlpha = 0.82;
+      ctx.beginPath(); ctx.arc(enemy.radius * 0.18, 0, enemy.radius * 0.3, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
     }
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = enemy.color;
-    ctx.globalAlpha = 0.82;
-    ctx.beginPath(); ctx.arc(enemy.radius * 0.18, 0, enemy.radius * 0.3, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 1;
     if (enemy.stun > 0) {
       ctx.strokeStyle = "#ffffff";
       ctx.beginPath(); ctx.arc(0, 0, enemy.radius + 9 + Math.sin(time * 14) * 2, 0, TAU); ctx.stroke();

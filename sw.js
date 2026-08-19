@@ -1,4 +1,4 @@
-const CACHE_VERSION = "neon-embers-v8-impact-mix";
+const CACHE_VERSION = "neon-embers-v10-unified-cyber-art";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -14,8 +14,17 @@ const APP_SHELL = [
   "./assets/items/power-hammer.png",
   "./assets/items/phase-twin-blades.png",
   "./assets/items/phase-blade.png",
-  "./assets/audio/blade-slice-1.ogg",
-  "./assets/audio/blade-slice-2.ogg",
+  "./assets/enemies/melee-drone.png",
+  "./assets/enemies/ranged-drone.png",
+  "./assets/enemies/brute-drone.png",
+  "./assets/enemies/shield-drone.png",
+  "./assets/enemies/elite-drone.png",
+  "./assets/enemies/boss-drone.png",
+  "./assets/world/energy-terminal.png",
+  "./assets/world/arena-pylon.png",
+  "./assets/audio/swing-whoosh-1.wav",
+  "./assets/audio/swing-whoosh-2.wav",
+  "./assets/audio/bullet-impact.wav",
   "./assets/audio/body-hit-1.ogg",
   "./assets/audio/body-hit-2.ogg",
   "./assets/audio/body-hit-3.ogg",
