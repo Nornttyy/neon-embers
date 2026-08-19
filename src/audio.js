@@ -5,6 +5,7 @@ export class AudioEngine {
     this.volume = 0.55;
     this.enabled = true;
     this.lastHitAt = 0;
+    this.noiseBuffer = null;
   }
 
   setVolume(value) {
@@ -25,6 +26,9 @@ export class AudioEngine {
       this.master = this.context.createGain();
       this.master.gain.value = this.volume * 0.28;
       this.master.connect(this.context.destination);
+      this.noiseBuffer = this.context.createBuffer(1, this.context.sampleRate, this.context.sampleRate);
+      const noiseData = this.noiseBuffer.getChannelData(0);
+      for (let index = 0; index < noiseData.length; index += 1) noiseData[index] = Math.random() * 2 - 1;
     }
     if (this.context.state === "suspended") this.context.resume();
   }
@@ -48,18 +52,11 @@ export class AudioEngine {
 
   noise({ duration = 0.08, gain = 0.05, frequency = 900, type = "bandpass", q = 0.8, delay = 0 }) {
     if (!this.enabled || !this.context || !this.master) return;
-    const sampleRate = this.context.sampleRate;
-    const buffer = this.context.createBuffer(1, Math.ceil(sampleRate * duration), sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let index = 0; index < data.length; index += 1) {
-      const fade = 1 - index / data.length;
-      data[index] = (Math.random() * 2 - 1) * fade;
-    }
     const source = this.context.createBufferSource();
     const filter = this.context.createBiquadFilter();
     const envelope = this.context.createGain();
     const now = this.context.currentTime + delay;
-    source.buffer = buffer;
+    source.buffer = this.noiseBuffer;
     filter.type = type;
     filter.frequency.value = frequency;
     filter.Q.value = q;
@@ -69,7 +66,9 @@ export class AudioEngine {
     source.connect(filter);
     filter.connect(envelope);
     envelope.connect(this.master);
-    source.start(now);
+    const maxOffset = Math.max(0, this.noiseBuffer.duration - duration - 0.01);
+    source.start(now, Math.random() * maxOffset, duration);
+    source.stop(now + duration + 0.01);
   }
 
   shoot(kind = "pulse") {

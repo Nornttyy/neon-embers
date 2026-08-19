@@ -1,4 +1,4 @@
-const CACHE_VERSION = "neon-embers-v4-dual-audio";
+const CACHE_VERSION = "neon-embers-v5-smooth-contact";
 const APP_SHELL = [
   "./",
   "./index.html",

@@ -16,10 +16,15 @@ function normalized(x, y) {
   return length > 0.0001 ? { x: x / length, y: y / length } : { x: 0, y: 0 };
 }
 
-function angleDifference(a, b) {
-  let difference = (a - b + Math.PI) % TAU - Math.PI;
-  if (difference < -Math.PI) difference += TAU;
-  return Math.abs(difference);
+function pointSegmentDistanceSquared(point, start, end) {
+  const segmentX = end.x - start.x;
+  const segmentY = end.y - start.y;
+  const lengthSquared = segmentX * segmentX + segmentY * segmentY;
+  if (lengthSquared < 0.0001) return distanceSquared(point, start);
+  const projection = clamp(((point.x - start.x) * segmentX + (point.y - start.y) * segmentY) / lengthSquared, 0, 1);
+  const closestX = start.x + segmentX * projection;
+  const closestY = start.y + segmentY * projection;
+  return (point.x - closestX) ** 2 + (point.y - closestY) ** 2;
 }
 
 export class Game {
@@ -102,7 +107,7 @@ export class Game {
   }
 
   resize() {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(1.5, window.devicePixelRatio || 1);
     this.view = { width: window.innerWidth, height: window.innerHeight, dpr };
     this.canvas.width = Math.round(this.view.width * dpr);
     this.canvas.height = Math.round(this.view.height * dpr);
@@ -137,7 +142,7 @@ export class Game {
     if (this.state !== "playing" || !this.player) return;
     const player = this.player;
     if (player.action === "attack") {
-      if (player.attackTimer >= player.attackDuration * 0.38) player.comboQueued = true;
+      player.comboQueued = true;
       return;
     }
     if (["dash", "broken", "skill"].includes(player.action)) return;
@@ -290,6 +295,7 @@ export class Game {
     this.particles = [];
     this.effects = [];
     this.damageTexts = [];
+    this.weaponTrails = { primary: [], offhand: [] };
     this.decorations = Array.from({ length: 100 }, (_, index) => ({
       x: (index * 347.71) % GAME.width,
       y: (index * 613.37) % GAME.height,
@@ -346,6 +352,7 @@ export class Game {
     this.flash = Math.max(0, this.flash - dt * 4.5);
     this.shake = Math.max(0, this.shake - dt * 20);
     this.updatePlayer(dt);
+    this.updateWeaponTrails(dt);
     this.updateSpawning(dt);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
@@ -522,20 +529,64 @@ export class Game {
 
   performMeleeHit(moveDefinition) {
     const player = this.player;
-    const reach = moveDefinition.range * player.stats.meleeRange;
+    const pose = this.getHeldWeaponPose(this.run.elapsed);
+    const shapes = this.getActiveWeaponShapes(pose);
     for (const enemy of this.enemies) {
       if (enemy.dead || player.attackHit.has(enemy)) continue;
-      const dx = enemy.x - player.x;
-      const dy = enemy.y - player.y;
-      const distance = Math.hypot(dx, dy);
-      if (distance > reach + enemy.radius) continue;
-      const angle = Math.atan2(dy, dx);
-      if (angleDifference(angle, player.facing) > moveDefinition.arc / 2) continue;
+      const touchingWeapon = shapes.some((shape) => {
+        const hitRadius = enemy.radius + shape.thickness;
+        if (pointSegmentDistanceSquared(enemy, shape.start, shape.end) <= hitRadius * hitRadius) return true;
+        if (shape.headRadius) {
+          const headHitRadius = enemy.radius + shape.headRadius;
+          return distanceSquared(enemy, shape.end) <= headHitRadius * headHitRadius;
+        }
+        return false;
+      });
+      if (!touchingWeapon) continue;
       player.attackHit.add(enemy);
-      const direction = normalized(dx, dy);
+      const direction = normalized(enemy.x - player.x, enemy.y - player.y);
       const critical = player.attackIndex === 2 ? 1.18 : 1;
       this.damageEnemy(enemy, moveDefinition.damage * player.stats.meleeDamage * critical, "melee", direction, moveDefinition.knockback);
     }
+  }
+
+  getWeaponHitShapes(pose) {
+    const weapon = WEAPONS[this.run.core.weapon];
+    const scale = this.player.stats.meleeRange * (this.player.action === "attack" && this.player.attackIndex === 2 ? 1.08 : 1);
+    const createShape = (angle, side, hand) => {
+      const perpendicular = angle + Math.PI / 2;
+      const origin = {
+        x: this.player.x + Math.cos(perpendicular) * side,
+        y: this.player.y + Math.sin(perpendicular) * side,
+      };
+      const start = {
+        x: origin.x + Math.cos(angle) * this.player.radius * 0.34,
+        y: origin.y + Math.sin(angle) * this.player.radius * 0.34,
+      };
+      const end = {
+        x: origin.x + Math.cos(angle) * weapon.collision.length * scale,
+        y: origin.y + Math.sin(angle) * weapon.collision.length * scale,
+      };
+      return {
+        hand,
+        start,
+        end,
+        thickness: weapon.collision.thickness * Math.sqrt(scale),
+        headRadius: weapon.collision.headRadius ? weapon.collision.headRadius * Math.sqrt(scale) : 0,
+      };
+    };
+    const primarySide = pose.offhandAngle == null ? 0 : 5;
+    const shapes = [createShape(pose.angle, primarySide, "primary")];
+    if (pose.offhandAngle != null) shapes.push(createShape(pose.offhandAngle, -5, "offhand"));
+    return shapes;
+  }
+
+  getActiveWeaponShapes(pose) {
+    const shapes = this.getWeaponHitShapes(pose);
+    if (this.run.core.weapon !== "twin") return shapes;
+    if (this.player.attackIndex === 0) return shapes.filter((shape) => shape.hand === "primary");
+    if (this.player.attackIndex === 1) return shapes.filter((shape) => shape.hand === "offhand");
+    return shapes;
   }
 
   startReload() {
@@ -957,6 +1008,23 @@ export class Game {
     return true;
   }
 
+  updateWeaponTrails(dt) {
+    if (!this.weaponTrails) return;
+    for (const hand of ["primary", "offhand"]) {
+      for (const point of this.weaponTrails[hand]) point.life -= dt;
+      this.weaponTrails[hand] = this.weaponTrails[hand].filter((point) => point.life > 0);
+    }
+    if (this.player.action !== "attack") return;
+    const timing = this.getAttackTiming();
+    if (timing.stage === "anticipation" || (timing.stage === "recovery" && timing.progress > 0.28)) return;
+    const pose = this.getHeldWeaponPose(this.run.elapsed);
+    for (const shape of this.getActiveWeaponShapes(pose)) {
+      const trail = this.weaponTrails[shape.hand];
+      trail.push({ x: shape.end.x, y: shape.end.y, life: 0.17, maxLife: 0.17 });
+      if (trail.length > 11) trail.splice(0, trail.length - 11);
+    }
+  }
+
   updateEffects(dt) {
     for (const particle of this.particles) {
       particle.life -= dt;
@@ -1049,8 +1117,9 @@ export class Game {
       this.renderMenuBackground(time);
       return;
     }
-    const shakeX = this.settings.shake ? randomBetween(-this.shake, this.shake) : 0;
-    const shakeY = this.settings.shake ? randomBetween(-this.shake, this.shake) : 0;
+    const shakeClock = this.run.elapsed * 62;
+    const shakeX = this.settings.shake ? Math.sin(shakeClock) * this.shake * 0.72 : 0;
+    const shakeY = this.settings.shake ? Math.cos(shakeClock * 0.83) * this.shake * 0.58 : 0;
     ctx.save();
     ctx.translate(this.view.width / 2 - this.camera.x + shakeX, this.view.height / 2 - this.camera.y + shakeY);
     this.renderArena(ctx);
@@ -1174,7 +1243,7 @@ export class Game {
       ctx.fill();
     }
     ctx.shadowColor = enemy.color;
-    ctx.shadowBlur = enemy.elite || enemy.boss ? 18 : 9;
+    ctx.shadowBlur = enemy.elite || enemy.boss ? 14 : 0;
     ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : "#12172a";
     ctx.strokeStyle = enemy.color;
     ctx.lineWidth = enemy.elite || enemy.boss ? 4 : 2;
@@ -1210,6 +1279,7 @@ export class Game {
     const player = this.player;
     if (player.invulnerable > 0 && Math.floor(player.invulnerable * 22) % 2 === 0) ctx.globalAlpha = 0.48;
     const weaponPose = this.getHeldWeaponPose(time);
+    this.drawWeaponTrails(ctx);
     this.drawHeldWeapon(ctx, weaponPose);
     this.drawTechBall(ctx, player.x, player.y, player.radius, time, this.run.core.color, player.facing, player.action);
 
@@ -1249,39 +1319,63 @@ export class Game {
     ctx.globalAlpha = 1;
   }
 
+  drawWeaponTrails(ctx) {
+    const weapon = WEAPONS[this.run.core.weapon];
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const hand of ["primary", "offhand"]) {
+      const trail = this.weaponTrails?.[hand] || [];
+      if (trail.length < 2) continue;
+      for (let index = 1; index < trail.length; index += 1) {
+        const previous = trail[index - 1];
+        const current = trail[index];
+        const alpha = clamp(Math.min(previous.life / previous.maxLife, current.life / current.maxLife), 0, 1);
+        ctx.globalAlpha = alpha * 0.18;
+        ctx.strokeStyle = weapon.color;
+        ctx.lineWidth = weapon.id === "hammer" ? 24 : 17;
+        ctx.beginPath(); ctx.moveTo(previous.x, previous.y); ctx.lineTo(current.x, current.y); ctx.stroke();
+        ctx.globalAlpha = alpha * 0.72;
+        ctx.strokeStyle = "#eaffff";
+        ctx.lineWidth = weapon.id === "hammer" ? 4 : 3;
+        ctx.beginPath(); ctx.moveTo(previous.x, previous.y); ctx.lineTo(current.x, current.y); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   getHeldWeaponPose(time) {
     const player = this.player;
-    let angle = player.facing + Math.sin(time * 2.2) * 0.035;
+    const idleMotion = Math.sin(time * 2.2) * 0.035;
+    let angle = player.facing + idleMotion;
     let offhandAngle = null;
     const isTwin = this.run.core.weapon === "twin";
     if (isTwin) {
-      angle = player.facing + 0.24 + Math.sin(time * 2.2) * 0.035;
-      offhandAngle = player.facing - 0.24 - Math.sin(time * 2.2) * 0.035;
+      angle = player.facing + 0.24 + idleMotion;
+      offhandAngle = player.facing - 0.24 - idleMotion;
     }
     if (player.action === "attack") {
-      const progress = clamp(player.attackTimer / Math.max(0.001, player.attackDuration), 0, 1);
-      const eased = progress < 0.5
-        ? 4 * progress * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+      const timing = this.getAttackTiming();
       if (isTwin) {
         if (player.attackIndex === 0) {
-          angle = player.facing + lerp(-1.2, 0.82, eased);
-          offhandAngle = player.facing - 0.48;
+          angle = player.facing + this.interpolateSwing(0.24, -1.12, 0.72, timing);
+          offhandAngle = player.facing - 0.32;
         } else if (player.attackIndex === 1) {
-          angle = player.facing + 0.48;
-          offhandAngle = player.facing + lerp(1.2, -0.82, eased);
+          angle = player.facing + 0.32;
+          offhandAngle = player.facing + this.interpolateSwing(-0.24, 1.12, -0.72, timing);
         } else {
-          angle = player.facing + lerp(-1.48, 1.08, eased);
-          offhandAngle = player.facing + lerp(1.48, -1.08, eased);
+          angle = player.facing + this.interpolateSwing(0.24, -1.28, 1.02, timing);
+          offhandAngle = player.facing + this.interpolateSwing(-0.24, 1.28, -1.02, timing);
         }
       } else {
         const swings = [
-          [-1.18, 0.78],
-          [0.96, -0.88],
-          [-1.48, 1.24],
+          [-1.08, 0.7],
+          [0.72, -0.7],
+          [-0.76, 1.12],
         ];
         const [start, end] = swings[player.attackIndex] || swings[0];
-        angle = player.facing + lerp(start, end, eased);
+        angle = player.facing + this.interpolateSwing(0, start, end, timing);
       }
     } else if (player.action === "block") {
       angle = player.facing + 1.28;
@@ -1294,6 +1388,24 @@ export class Game {
       if (isTwin) offhandAngle = player.facing - Math.sin(time * 18) * 0.12;
     }
     return { angle, offhandAngle };
+  }
+
+  getAttackTiming() {
+    const player = this.player;
+    const definition = WEAPONS[this.run.core.weapon].combo[player.attackIndex];
+    const progress = clamp(player.attackTimer / Math.max(0.001, player.attackDuration), 0, 1);
+    const anticipationEnd = clamp(definition.activeStart / definition.duration * 0.72, 0.14, 0.3);
+    const strikeEnd = clamp(definition.activeEnd / definition.duration * 1.08, 0.54, 0.8);
+    if (progress < anticipationEnd) return { stage: "anticipation", progress: progress / anticipationEnd };
+    if (progress < strikeEnd) return { stage: "strike", progress: (progress - anticipationEnd) / (strikeEnd - anticipationEnd) };
+    return { stage: "recovery", progress: (progress - strikeEnd) / Math.max(0.001, 1 - strikeEnd) };
+  }
+
+  interpolateSwing(rest, start, end, timing) {
+    const smoothstep = (value) => value * value * (3 - 2 * value);
+    if (timing.stage === "anticipation") return lerp(rest, start, smoothstep(timing.progress));
+    if (timing.stage === "strike") return lerp(start, end, 1 - Math.pow(1 - timing.progress, 3));
+    return lerp(end, rest, smoothstep(timing.progress));
   }
 
   drawHeldWeapon(ctx, pose) {
@@ -1310,12 +1422,10 @@ export class Game {
       const primaryDirection = combo === 1 ? -1 : 1;
       const offhandDirection = -1;
       if (primaryActive) {
-        this.drawWeaponSprite(ctx, image, weapon, pose.angle - primaryDirection * 0.3, primarySide, 0.07, attackScale);
-        this.drawWeaponSprite(ctx, image, weapon, pose.angle - primaryDirection * 0.16, primarySide, 0.14, attackScale);
+        this.drawWeaponSprite(ctx, image, weapon, pose.angle - primaryDirection * 0.14, primarySide, 0.12, attackScale);
       }
       if (offhandActive) {
-        this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle - offhandDirection * 0.3, -5, 0.07, attackScale);
-        this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle - offhandDirection * 0.16, -5, 0.14, attackScale);
+        this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle - offhandDirection * 0.14, -5, 0.12, attackScale);
       }
     }
     this.drawWeaponSprite(ctx, image, weapon, pose.angle, primarySide, 1, attackScale);
@@ -1335,7 +1445,7 @@ export class Game {
     ctx.scale(scale, scale);
     ctx.rotate(rotation);
     ctx.shadowColor = weapon.color;
-    ctx.shadowBlur = alpha < 1 ? 14 : 7;
+    ctx.shadowBlur = alpha < 1 ? 0 : 3;
     ctx.drawImage(image, -anchorX * size, -anchorY * size, size, size);
     ctx.restore();
   }
