@@ -32,7 +32,7 @@ export class Game {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: false });
     this.callbacks = callbacks;
-    this.settings = { volume: 0.55, musicVolume: 0.32, shake: true, reduceFlash: false };
+    this.settings = { volume: 0.5, musicVolume: 0.26, shake: true, reduceFlash: false };
     this.state = "menu";
     this.lastFrame = performance.now();
     this.view = { width: window.innerWidth, height: window.innerHeight, dpr: 1 };

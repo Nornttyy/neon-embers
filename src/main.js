@@ -13,7 +13,7 @@ const DEFAULT_SAVE = Object.freeze({
   guideSeen: false,
   lastCore: "hunter",
   meta: { power: 0, armor: 0, recovery: 0 },
-  settings: { volume: 0.55, musicVolume: 0.32, shake: true, reduceFlash: false },
+  settings: { volume: 0.5, musicVolume: 0.26, shake: true, reduceFlash: false },
 });
 
 function loadSave() {

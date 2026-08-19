@@ -1,4 +1,4 @@
-const CACHE_VERSION = "neon-embers-v6-fixed-scale-music";
+const CACHE_VERSION = "neon-embers-v7-balanced-samples";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -14,6 +14,14 @@ const APP_SHELL = [
   "./assets/items/power-hammer.png",
   "./assets/items/phase-twin-blades.png",
   "./assets/items/phase-blade.png",
+  "./assets/audio/blade-swing-1.ogg",
+  "./assets/audio/blade-swing-2.ogg",
+  "./assets/audio/blade-swing-3.ogg",
+  "./assets/audio/blade-hit-1.ogg",
+  "./assets/audio/blade-hit-2.ogg",
+  "./assets/audio/blade-hit-3.ogg",
+  "./assets/audio/hammer-hit-1.ogg",
+  "./assets/audio/hammer-hit-2.ogg",
   "./src/ad-service.js",
   "./src/audio.js",
   "./src/config.js",
