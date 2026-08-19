@@ -58,6 +58,7 @@ const elements = {
   staminaText: byId("stamina-text"),
   hudMission: byId("hud-mission"),
   hudPhase: byId("hud-phase"),
+  hudObjectiveText: byId("hud-objective-text"),
   hudTime: byId("hud-time"),
   hudKills: byId("hud-kills"),
   hudScrap: byId("hud-scrap"),
@@ -176,6 +177,7 @@ function renderHud(data) {
   elements.staminaText.textContent = `体力 ${Math.ceil(data.shield)} / ${Math.round(data.shieldMax)}`;
   elements.missionFill.style.width = `${Math.max(0, data.progress * 100)}%`;
   elements.hudPhase.textContent = data.phase;
+  elements.hudObjectiveText.textContent = data.objective;
   elements.hudTime.textContent = data.time;
   elements.hudKills.textContent = data.kills;
   elements.hudScrap.textContent = data.scrap;

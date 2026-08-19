@@ -1,4 +1,4 @@
-import { CORES, ENEMIES, GAME, WEAPONS, getWaveProfile } from "./config.js";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, WEAPONS } from "./config.js";
 import { audio } from "./audio.js";
 
 const TAU = Math.PI * 2;
@@ -264,16 +264,18 @@ export class Game {
       coreId: core.id,
       core,
       elapsed: 0,
-      spawnTimer: 1.15,
+      spawnTimer: 0.55,
       kills: 0,
       scrap: 0,
       energy: 0,
-      spawnCount: 0,
-      mission: "01",
+      stageIndex: 0,
+      stageQueue: [...MISSION_STAGES[0].enemies],
+      stageDefeated: 0,
+      stageTransition: 0,
+      mission: MISSION_STAGES[0].id,
       bossSpawned: false,
       boss: null,
       victory: false,
-      eliteSpawned: false,
       metaRecovery: Number(meta.recovery || 0),
     };
     this.player = {
@@ -343,7 +345,7 @@ export class Game {
     this.flash = 0;
     this.state = "playing";
     this.callbacks.onState?.("playing");
-    this.callbacks.onAnnouncement?.({ title: core.name, subtitle: "手动战斗协议已加载" });
+    this.callbacks.onAnnouncement?.({ title: `${MISSION_STAGES[0].id} ${MISSION_STAGES[0].name}`, subtitle: MISSION_STAGES[0].subtitle });
     this.emitHud(true);
   }
 
@@ -633,28 +635,63 @@ export class Game {
 
   updateSpawning(dt) {
     const run = this.run;
-    if (!run.eliteSpawned && run.elapsed >= 88) {
-      run.eliteSpawned = true;
-      this.spawnEnemy("elite", true);
-      this.callbacks.onAnnouncement?.({ title: "精英处刑机", subtitle: "重型攻击会大量削减格挡体力" });
-    }
-    if (!run.bossSpawned && run.elapsed >= GAME.bossTime) {
-      run.bossSpawned = true;
-      run.boss = this.spawnEnemy("boss", true);
-      this.callbacks.onAnnouncement?.({ title: "零号执行体", subtitle: "最终目标已进入训练场" });
-      this.flash = this.settings.reduceFlash ? 0.1 : 0.4;
-      this.shake = 16;
-      audio.explosion();
+    const stage = MISSION_STAGES[run.stageIndex];
+    if (run.stageTransition > 0) {
+      run.stageTransition = Math.max(0, run.stageTransition - dt);
+      return;
     }
     run.spawnTimer -= dt;
-    if (run.spawnTimer <= 0 && this.enemies.length < GAME.maxEnemies) {
-      const profile = getWaveProfile(run.elapsed);
-      const type = profile.pool[run.spawnCount % profile.pool.length];
-      run.spawnCount += 1;
-      this.spawnEnemy(type);
-      const crowdSlowdown = 1 + Math.max(0, this.enemies.length - 8) / 24 * 0.85;
-      run.spawnTimer = profile.rate * crowdSlowdown * randomBetween(0.88, 1.16);
+    if (run.stageQueue.length > 0 && run.spawnTimer <= 0 && this.enemies.length < stage.maxActive) {
+      const type = run.stageQueue.shift();
+      const enemy = this.spawnEnemy(type, true);
+      run.spawnTimer = stage.spawnDelay;
+      if (type === "elite") {
+        this.callbacks.onAnnouncement?.({ title: "精英处刑机", subtitle: "重型攻击会大量削减格挡体力" });
+      }
+      if (type === "boss") {
+        run.bossSpawned = true;
+        run.boss = enemy;
+        this.callbacks.onAnnouncement?.({ title: "零号执行体", subtitle: "最终目标已进入核心战区" });
+        this.flash = this.settings.reduceFlash ? 0.1 : 0.4;
+        this.shake = 16;
+        audio.explosion();
+      }
     }
+    if (run.stageQueue.length === 0 && this.enemies.length === 0 && run.stageIndex < MISSION_STAGES.length - 1) {
+      this.completeMissionStage();
+    }
+  }
+
+  completeMissionStage() {
+    const run = this.run;
+    const cleared = MISSION_STAGES[run.stageIndex];
+    const nextIndex = run.stageIndex + 1;
+    const next = MISSION_STAGES[nextIndex];
+    const uncollectedEnergy = this.pickups.reduce((sum, pickup) => sum + pickup.value, 0);
+    if (uncollectedEnergy > 0) {
+      run.energy += uncollectedEnergy;
+      this.pickups = [];
+      audio.pickup();
+    }
+    run.stageIndex = nextIndex;
+    run.stageQueue = [...next.enemies];
+    run.stageDefeated = 0;
+    run.stageTransition = 1.45;
+    run.spawnTimer = next.spawnDelay;
+    run.mission = next.id;
+    this.projectiles = [];
+    this.enemyProjectiles = [];
+    this.player.x = GAME.width / 2;
+    this.player.y = GAME.height / 2;
+    this.player.health = Math.min(this.player.maxHealth, this.player.health + next.heal);
+    this.player.stamina = this.player.maxStamina;
+    this.player.staminaDelay = 0;
+    this.camera.x = this.player.x;
+    this.camera.y = this.player.y;
+    this.effects.push({ type: "ring", x: this.player.x, y: this.player.y, radius: 120, life: 0.62, maxLife: 0.62, color: this.run.core.color });
+    this.callbacks.onAnnouncement?.({ title: `${cleared.id} 已突破`, subtitle: `下一关 · ${next.name}` });
+    audio.levelUp();
+    this.emitHud(true);
   }
 
   spawnEnemy(typeId, far = false, override = {}) {
@@ -663,7 +700,7 @@ export class Game {
     const distance = far ? Math.max(this.view.width, this.view.height) * 0.62 : Math.max(this.view.width, this.view.height) * randomBetween(0.48, 0.64);
     const x = clamp(this.player.x + Math.cos(angle) * distance, 50, GAME.width - 50);
     const y = clamp(this.player.y + Math.sin(angle) * distance, 50, GAME.height - 50);
-    const difficulty = 1 + Math.min(0.58, this.run.elapsed / GAME.runDuration * 0.58);
+    const difficulty = 1 + this.run.stageIndex * 0.16;
     const enemy = {
       ...definition,
       ...override,
@@ -856,6 +893,7 @@ export class Game {
     if (enemy.dead) return;
     enemy.dead = true;
     this.run.kills += 1;
+    this.run.stageDefeated += 1;
     const energy = Math.max(1, Math.round(enemy.energy));
     const count = enemy.boss ? 10 : enemy.elite ? 4 : 1;
     for (let index = 0; index < count; index += 1) {
@@ -1040,16 +1078,19 @@ export class Game {
     if (!this.run || !this.player) return;
     const player = this.player;
     const melee = WEAPONS[this.run.core.weapon];
-    const remaining = Math.max(0, GAME.runDuration - this.run.elapsed);
+    const stage = MISSION_STAGES[this.run.stageIndex];
+    const stageProgress = clamp(this.run.stageDefeated / stage.enemies.length, 0, 1);
+    const remainingTargets = Math.max(0, stage.enemies.length - this.run.stageDefeated);
     this.callbacks.onHud?.({
       mission: this.run.mission,
       health: player.health,
       maxHealth: player.maxHealth,
       shield: player.stamina,
       shieldMax: player.maxStamina,
-      progress: clamp(this.run.elapsed / GAME.bossTime, 0, 1),
-      phase: this.run.bossSpawned ? "最终训练" : this.run.elapsed < 45 ? "动作校准" : this.run.elapsed < 105 ? "混合敌群" : "高压协议",
-      time: formatTime(remaining),
+      progress: clamp((this.run.stageIndex + stageProgress) / MISSION_STAGES.length, 0, 1),
+      phase: this.run.stageTransition > 0 ? "战区转移" : stage.name,
+      objective: this.run.stageTransition > 0 ? `正在进入 ${stage.name}` : stage.boss ? "击败零号执行体" : `清除本关目标 · 剩余 ${remainingTargets}`,
+      time: formatTime(this.run.elapsed),
       kills: this.run.kills,
       scrap: this.run.energy,
       dash: 1 - clamp(player.dashCooldown / (GAME.dashCooldown * player.stats.dashCooldown), 0, 1),
@@ -1140,9 +1181,15 @@ export class Game {
   }
 
   renderArena(ctx) {
-    ctx.fillStyle = "#060b16";
+    const palettes = [
+      { ground: "#060b16", grid: "rgba(76,181,220,.08)", border: "rgba(77,246,255,.34)" },
+      { ground: "#0b0815", grid: "rgba(183,125,255,.09)", border: "rgba(183,125,255,.38)" },
+      { ground: "#13070e", grid: "rgba(255,70,110,.09)", border: "rgba(255,70,110,.44)" },
+    ];
+    const palette = palettes[this.run?.stageIndex || 0] || palettes[0];
+    ctx.fillStyle = palette.ground;
     ctx.fillRect(0, 0, GAME.width, GAME.height);
-    ctx.strokeStyle = "rgba(76,181,220,.08)";
+    ctx.strokeStyle = palette.grid;
     ctx.lineWidth = 1;
     const grid = 80;
     for (let x = 0; x <= GAME.width; x += grid) {
@@ -1166,7 +1213,7 @@ export class Game {
       ctx.fillStyle = decoration.kind === 0 ? "rgba(77,246,255,.15)" : "rgba(183,125,255,.08)";
       ctx.fillRect(decoration.x, decoration.y, decoration.size * 2.6, decoration.size);
     }
-    ctx.strokeStyle = "rgba(77,246,255,.34)";
+    ctx.strokeStyle = palette.border;
     ctx.lineWidth = 4;
     ctx.strokeRect(20, 20, GAME.width - 40, GAME.height - 40);
   }

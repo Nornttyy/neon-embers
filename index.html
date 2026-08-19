@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-title" content="霓虹余烬" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="霓虹余烬 · Neon Embers" />
-    <meta property="og:description" content="操控科技小球，使用近战、远程、闪避、格挡和技能通过训练场。" />
+    <meta property="og:description" content="操控科技小球，使用近战、远程、闪避、格挡和技能连续突破三处战区。" />
     <meta property="og:image" content="assets/icon-512.png" />
     <title>霓虹余烬 · Neon Embers</title>
     <link rel="manifest" href="manifest.webmanifest" />
@@ -27,7 +27,7 @@
 
       <section id="menu-screen" class="screen menu-screen is-active" aria-labelledby="game-title">
         <div class="menu-topline">
-          <span class="signal"><i></i> ACTION MISSION // 0.5</span>
+          <span class="signal"><i></i> STAGE MISSION // 0.6</span>
           <button class="icon-button" id="settings-button" type="button" aria-label="打开设置">⚙</button>
         </div>
 
@@ -39,7 +39,7 @@
 
           <div class="menu-actions">
             <button class="primary-button" id="start-button" type="button">
-              <span>开始单机任务</span><small>选择固定装备，清除训练首领</small>
+              <span>开始单机闯关</span><small>选择固定装备，连续突破三处战区</small>
             </button>
             <button class="secondary-button" id="meta-button" type="button">装备校准</button>
             <button class="secondary-button" id="guide-button" type="button">新手教程</button>
@@ -109,7 +109,7 @@
 
       <section id="hud" class="hud" aria-label="游戏状态">
         <div class="hud-top-left">
-          <div class="level-badge"><small>MIS</small><strong id="hud-mission">01</strong></div>
+          <div class="level-badge"><small>MIS</small><strong id="hud-mission">1-1</strong></div>
           <div class="bar-stack">
             <div class="bar health-bar"><i id="health-fill"></i><span id="health-text">100 / 100</span></div>
             <div class="bar shield-bar"><i id="shield-fill"></i><span id="stamina-text">体力 100 / 100</span></div>
@@ -117,9 +117,9 @@
           </div>
         </div>
         <div class="hud-objective">
-          <span id="hud-phase">敌潮 01</span>
-          <strong id="hud-time">06:00</strong>
-          <small id="hud-objective-text">完成阶段目标，清除首领</small>
+          <span id="hud-phase">外围突破</span>
+          <strong id="hud-time">00:00</strong>
+          <small id="hud-objective-text">清除本关全部敌人</small>
         </div>
         <div class="hud-top-right">
           <div><span>击杀</span><strong id="hud-kills">0</strong></div>

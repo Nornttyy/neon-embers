@@ -1,8 +1,6 @@
 export const GAME = Object.freeze({
   width: 2200,
   height: 1400,
-  runDuration: 180,
-  bossTime: 150,
   playerRadius: 23,
   playerSpeed: 235,
   dashSpeed: 760,
@@ -82,19 +80,42 @@ export const ENEMIES = Object.freeze({
   boss: { id: "boss", name: "零号执行体", color: "#ff2e67", radius: 58, hp: 2900, speed: 57, damage: 38, energy: 100, reach: 118, windup: 0.82, heavy: true, ranged: true, boss: true },
 });
 
+export const MISSION_STAGES = Object.freeze([
+  Object.freeze({
+    id: "1-1",
+    name: "外围突破",
+    subtitle: "清除切割体与疾行体",
+    enemies: Object.freeze(["chaser", "skitter", "chaser", "skitter", "chaser", "chaser", "skitter", "chaser"]),
+    spawnDelay: 0.72,
+    maxActive: 4,
+    heal: 0,
+  }),
+  Object.freeze({
+    id: "1-2",
+    name: "火力封锁",
+    subtitle: "突破远程、护盾与重装组合",
+    enemies: Object.freeze(["shooter", "chaser", "brute", "shooter", "skitter", "sentinel", "lancer", "brute", "shooter", "elite"]),
+    spawnDelay: 0.84,
+    maxActive: 4,
+    heal: 22,
+  }),
+  Object.freeze({
+    id: "1-B",
+    name: "核心决战",
+    subtitle: "击败零号执行体",
+    enemies: Object.freeze(["boss"]),
+    spawnDelay: 1.1,
+    maxActive: 1,
+    heal: 30,
+    boss: true,
+  }),
+]);
+
 export const META_UPGRADES = Object.freeze([
   { id: "power", name: "初始校准", description: "单机与合作模式基础伤害 +4%", max: 5, baseCost: 45 },
   { id: "armor", name: "备用装甲", description: "单机与合作模式初始生命 +8", max: 5, baseCost: 40 },
   { id: "recovery", name: "回收协议", description: "核心能源结算 +6%", max: 5, baseCost: 55 },
 ]);
-
-export function getWaveProfile(elapsed) {
-  if (elapsed < 30) return { rate: 2.45, pool: ["chaser", "skitter"] };
-  if (elapsed < 70) return { rate: 1.95, pool: ["chaser", "skitter", "shooter"] };
-  if (elapsed < 115) return { rate: 1.58, pool: ["chaser", "skitter", "shooter", "brute"] };
-  if (elapsed < GAME.bossTime) return { rate: 1.28, pool: ["skitter", "shooter", "brute", "sentinel", "lancer"] };
-  return { rate: 1.55, pool: ["chaser", "shooter", "lancer"] };
-}
 
 export function metaCost(definition, currentLevel) {
   return Math.round(definition.baseCost * (1 + currentLevel * 0.72));
