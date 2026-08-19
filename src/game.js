@@ -1,4 +1,4 @@
-import { CORES, ENEMIES, GAME, MISSION_STAGES, WEAPONS } from "./config.js";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js";
 import { audio } from "./audio.js";
 
 const TAU = Math.PI * 2;
@@ -267,11 +267,12 @@ export class Game {
       spawnTimer: 0.55,
       kills: 0,
       scrap: 0,
-      energy: 0,
+      energy: 25,
+      energyEarned: 0,
+      purchases: {},
       stageIndex: 0,
       stageQueue: [...MISSION_STAGES[0].enemies],
       stageDefeated: 0,
-      stageTransition: 0,
       mission: MISSION_STAGES[0].id,
       bossSpawned: false,
       boss: null,
@@ -343,10 +344,84 @@ export class Game {
     this.camera.y = this.player.y;
     this.shake = 0;
     this.flash = 0;
-    this.state = "playing";
-    this.callbacks.onState?.("playing");
-    this.callbacks.onAnnouncement?.({ title: `${MISSION_STAGES[0].id} ${MISSION_STAGES[0].name}`, subtitle: MISSION_STAGES[0].subtitle });
+    this.state = "room";
+    audio.pauseMusic();
+    this.callbacks.onState?.("room");
     this.emitHud(true);
+    this.callbacks.onRoom?.(this.getRoomState());
+  }
+
+  getRoomState() {
+    if (!this.run || !this.player) return null;
+    const stage = MISSION_STAGES[this.run.stageIndex];
+    const availability = {
+      repair: this.player.health < this.player.maxHealth,
+      ammo: this.player.ammo < this.player.maxAmmo,
+      stamina: this.player.stamina < this.player.maxStamina,
+      barrier: this.player.barrier < 80,
+    };
+    const reasons = {
+      repair: "生命已满",
+      ammo: "弹药已满",
+      stamina: "体力已满",
+      barrier: "护盾已满",
+    };
+    return {
+      stage: { id: stage.id, name: stage.name, subtitle: stage.subtitle, boss: Boolean(stage.boss) },
+      energy: this.run.energy,
+      health: Math.ceil(this.player.health),
+      maxHealth: Math.round(this.player.maxHealth),
+      stamina: Math.ceil(this.player.stamina),
+      maxStamina: Math.round(this.player.maxStamina),
+      ammo: this.player.ammo,
+      maxAmmo: this.player.maxAmmo,
+      barrier: Math.ceil(this.player.barrier),
+      items: ROOM_ITEMS.map((item) => ({
+        ...item,
+        available: availability[item.id],
+        reason: availability[item.id] ? "" : reasons[item.id],
+        purchased: this.run.purchases[item.id] || 0,
+      })),
+    };
+  }
+
+  purchaseRoomItem(itemId) {
+    if (this.state !== "room") return { ok: false, message: "只能在整备房间购买" };
+    const item = ROOM_ITEMS.find((candidate) => candidate.id === itemId);
+    const room = this.getRoomState();
+    const roomItem = room?.items.find((candidate) => candidate.id === itemId);
+    if (!item || !roomItem) return { ok: false, message: "未找到该物品" };
+    if (!roomItem.available) return { ok: false, message: roomItem.reason };
+    if (this.run.energy < item.cost) return { ok: false, message: "任务能源不足" };
+
+    this.run.energy -= item.cost;
+    if (item.id === "repair") this.player.health = Math.min(this.player.maxHealth, this.player.health + item.amount);
+    if (item.id === "ammo") {
+      this.player.ammo = this.player.maxAmmo;
+      this.player.reloadTimer = 0;
+    }
+    if (item.id === "stamina") {
+      this.player.stamina = this.player.maxStamina;
+      this.player.staminaDelay = 0;
+    }
+    if (item.id === "barrier") this.player.barrier = Math.min(80, this.player.barrier + item.amount);
+    this.run.purchases[item.id] = (this.run.purchases[item.id] || 0) + 1;
+    audio.pickup();
+    this.emitHud(true);
+    this.callbacks.onRoom?.(this.getRoomState());
+    return { ok: true, message: `${item.name} 已装配` };
+  }
+
+  beginStage() {
+    if (this.state !== "room") return false;
+    const stage = MISSION_STAGES[this.run.stageIndex];
+    this.state = "playing";
+    this.run.spawnTimer = 0.45;
+    audio.resumeMusic();
+    this.callbacks.onState?.("playing");
+    this.callbacks.onAnnouncement?.({ title: `${stage.id} ${stage.name}`, subtitle: stage.subtitle });
+    this.emitHud(true);
+    return true;
   }
 
   stop() {
@@ -636,10 +711,6 @@ export class Game {
   updateSpawning(dt) {
     const run = this.run;
     const stage = MISSION_STAGES[run.stageIndex];
-    if (run.stageTransition > 0) {
-      run.stageTransition = Math.max(0, run.stageTransition - dt);
-      return;
-    }
     run.spawnTimer -= dt;
     if (run.stageQueue.length > 0 && run.spawnTimer <= 0 && this.enemies.length < stage.maxActive) {
       const type = run.stageQueue.shift();
@@ -670,28 +741,30 @@ export class Game {
     const uncollectedEnergy = this.pickups.reduce((sum, pickup) => sum + pickup.value, 0);
     if (uncollectedEnergy > 0) {
       run.energy += uncollectedEnergy;
+      run.energyEarned += uncollectedEnergy;
       this.pickups = [];
       audio.pickup();
     }
     run.stageIndex = nextIndex;
     run.stageQueue = [...next.enemies];
     run.stageDefeated = 0;
-    run.stageTransition = 1.45;
-    run.spawnTimer = next.spawnDelay;
+    run.spawnTimer = 0.45;
     run.mission = next.id;
     this.projectiles = [];
     this.enemyProjectiles = [];
     this.player.x = GAME.width / 2;
     this.player.y = GAME.height / 2;
-    this.player.health = Math.min(this.player.maxHealth, this.player.health + next.heal);
-    this.player.stamina = this.player.maxStamina;
-    this.player.staminaDelay = 0;
+    this.player.action = "idle";
+    this.player.blockHeld = false;
     this.camera.x = this.player.x;
     this.camera.y = this.player.y;
-    this.effects.push({ type: "ring", x: this.player.x, y: this.player.y, radius: 120, life: 0.62, maxLife: 0.62, color: this.run.core.color });
-    this.callbacks.onAnnouncement?.({ title: `${cleared.id} 已突破`, subtitle: `下一关 · ${next.name}` });
+    this.state = "room";
+    audio.pauseMusic();
     audio.levelUp();
+    this.callbacks.onState?.("room");
+    this.callbacks.onAnnouncement?.({ title: `${cleared.id} 已突破`, subtitle: "返回整备房间" });
     this.emitHud(true);
+    this.callbacks.onRoom?.(this.getRoomState());
   }
 
   spawnEnemy(typeId, far = false, override = {}) {
@@ -1000,6 +1073,7 @@ export class Game {
 
   collectEnergy(value) {
     this.run.energy += value;
+    this.run.energyEarned += value;
     audio.pickup();
   }
 
@@ -1060,7 +1134,7 @@ export class Game {
     this.run.victory = victory;
     this.state = "result";
     audio.endRun(victory);
-    const coreEnergy = Math.max(1, Math.round((this.run.kills * 0.85 + this.run.energy * 0.25 + (victory ? 55 : 0)) * (1 + this.run.metaRecovery * 0.06)));
+    const coreEnergy = Math.max(1, Math.round((this.run.kills * 0.85 + this.run.energyEarned * 0.25 + (victory ? 55 : 0)) * (1 + this.run.metaRecovery * 0.06)));
     this.run.scrap = coreEnergy;
     this.callbacks.onResult?.({
       victory,
@@ -1069,7 +1143,7 @@ export class Game {
       timeText: formatTime(this.run.elapsed),
       kills: this.run.kills,
       mission: this.run.mission,
-      energy: this.run.energy,
+      energy: this.run.energyEarned,
       scrap: coreEnergy,
     });
   }
@@ -1088,8 +1162,8 @@ export class Game {
       shield: player.stamina,
       shieldMax: player.maxStamina,
       progress: clamp((this.run.stageIndex + stageProgress) / MISSION_STAGES.length, 0, 1),
-      phase: this.run.stageTransition > 0 ? "战区转移" : stage.name,
-      objective: this.run.stageTransition > 0 ? `正在进入 ${stage.name}` : stage.boss ? "击败零号执行体" : `清除本关目标 · 剩余 ${remainingTargets}`,
+      phase: this.state === "room" ? "整备房间" : stage.name,
+      objective: this.state === "room" ? `准备进入 ${stage.id} ${stage.name}` : stage.boss ? "击败零号执行体" : `清除本关目标 · 剩余 ${remainingTargets}`,
       time: formatTime(this.run.elapsed),
       kills: this.run.kills,
       scrap: this.run.energy,

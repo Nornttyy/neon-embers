@@ -50,6 +50,16 @@ const elements = {
   metaScrap: byId("meta-scrap"),
   coreGrid: byId("core-grid"),
   metaGrid: byId("meta-grid"),
+  roomGrid: byId("room-grid"),
+  roomStage: byId("room-stage"),
+  roomTitle: byId("room-title"),
+  roomSubtitle: byId("room-subtitle"),
+  roomEnergy: byId("room-energy"),
+  roomHealth: byId("room-health"),
+  roomStamina: byId("room-stamina"),
+  roomAmmo: byId("room-ammo"),
+  roomBarrier: byId("room-barrier"),
+  roomStartButton: byId("room-start-button"),
   weaponDock: byId("weapon-dock"),
   healthFill: byId("health-fill"),
   healthText: byId("health-text"),
@@ -203,6 +213,41 @@ function renderHud(data) {
   }
 }
 
+function renderRoom(data) {
+  if (!data) return;
+  elements.roomStage.textContent = data.stage.id;
+  elements.roomTitle.textContent = data.stage.name;
+  elements.roomSubtitle.textContent = data.stage.subtitle;
+  elements.roomEnergy.textContent = data.energy;
+  elements.roomHealth.textContent = `${data.health} / ${data.maxHealth}`;
+  elements.roomStamina.textContent = `${data.stamina} / ${data.maxStamina}`;
+  elements.roomAmmo.textContent = `${data.ammo} / ${data.maxAmmo}`;
+  elements.roomBarrier.textContent = `${data.barrier} / 80`;
+  elements.roomStartButton.innerHTML = `<span>开始 ${data.stage.id} 战斗</span><small>${data.stage.boss ? "进入核心区迎战最终首领" : "整备完成后手动进入战区"}</small>`;
+  elements.roomGrid.replaceChildren();
+  for (const item of data.items) {
+    const article = document.createElement("article");
+    article.className = "room-item";
+    article.innerHTML = `
+      <div class="room-item-code">${item.code}</div>
+      <div class="room-item-copy"><h3>${item.name}</h3><p>${item.description}</p><small>本次任务已购买 ${item.purchased}</small></div>
+    `;
+    const button = document.createElement("button");
+    button.className = "room-buy";
+    button.type = "button";
+    button.dataset.roomItem = item.id;
+    button.disabled = !item.available || data.energy < item.cost;
+    button.textContent = !item.available ? item.reason : `${item.cost} 能源`;
+    button.addEventListener("click", () => {
+      const result = game.purchaseRoomItem(item.id);
+      showToast(result.message);
+    });
+    article.append(button);
+    elements.roomGrid.append(article);
+  }
+  showGameLayer("room-screen");
+}
+
 function showResult(summary) {
   profile.scrap += summary.scrap;
   profile.bestTime = Math.max(profile.bestTime, Math.round(summary.time));
@@ -224,6 +269,7 @@ function showResult(summary) {
 
 const game = new Game(byId("game-canvas"), {
   onHud: renderHud,
+  onRoom: renderRoom,
   onPauseChange: (paused) => {
     if (paused) showGameLayer("pause-screen");
     else showGameLayer();
@@ -238,7 +284,6 @@ function beginRun(coreId) {
   saveProfile();
   game.applySettings(profile.settings);
   game.start(coreId, profile.meta);
-  showGameLayer();
 }
 
 function returnToMenu() {
@@ -324,6 +369,10 @@ byId("reset-save-button").addEventListener("click", (event) => {
 });
 
 byId("pause-button").addEventListener("click", () => game.pause(true));
+byId("room-start-button").addEventListener("click", () => {
+  if (game.beginStage()) showGameLayer();
+});
+byId("room-exit-button").addEventListener("click", returnToMenu);
 byId("resume-button").addEventListener("click", () => game.resume());
 byId("restart-button").addEventListener("click", () => beginRun(profile.lastCore));
 byId("quit-button").addEventListener("click", returnToMenu);
