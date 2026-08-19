@@ -57,17 +57,17 @@ export const CORES = Object.freeze({
   hunter: {
     id: "hunter", name: "剑锋球体", subtitle: "均衡 · 反击",
     description: "装备弧光剑。主动技能释放环形脉冲斩。", color: "#4df6ff",
-    weapon: "blade", skill: "pulseSlash", asset: "assets/items/energy-sword.png", bonuses: { speed: 0.04 },
+    weapon: "blade", skill: "pulseSlash", asset: "assets/items/energy-sword.png", bodyAsset: "assets/players/hunter-core.png", bonuses: { speed: 0.04 },
   },
   storm: {
     id: "storm", name: "相位球体", subtitle: "高速 · 连击",
     description: "装备相位双刃。主动技能进入短时超频。", color: "#b77dff",
-    weapon: "twin", skill: "overdrive", asset: "assets/items/phase-twin-blades.png", bonuses: { stamina: 12 },
+    weapon: "twin", skill: "overdrive", asset: "assets/items/phase-twin-blades.png", bodyAsset: "assets/players/storm-core.png", bonuses: { stamina: 12 },
   },
   bastion: {
     id: "bastion", name: "壁垒球体", subtitle: "重击 · 防御",
     description: "装备动力锤。主动技能生成应急护盾。", color: "#ffcc66",
-    weapon: "hammer", skill: "barrier", asset: "assets/items/power-hammer.png", bonuses: { health: 24 },
+    weapon: "hammer", skill: "barrier", asset: "assets/items/power-hammer.png", bodyAsset: "assets/players/bastion-core.png", bonuses: { health: 24 },
   },
 });
 

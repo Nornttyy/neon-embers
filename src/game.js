@@ -2,6 +2,16 @@ import { CORES, ENEMIES, GAME, UPGRADES, WEAPONS, getWaveProfile, xpForLevel } f
 import { audio } from "./audio.js";
 
 const TAU = Math.PI * 2;
+const PLAYER_SPRITES = Object.freeze({
+  hunter: "playerHunter",
+  storm: "playerStorm",
+  bastion: "playerBastion",
+});
+const PLAYER_SPRITE_SCALE = Object.freeze({
+  hunter: 3.9,
+  storm: 2.75,
+  bastion: 2.45,
+});
 const ENEMY_SPRITES = Object.freeze({
   chaser: "enemyMelee",
   skitter: "enemyMelee",
@@ -74,6 +84,9 @@ export class Game {
       hammer: WEAPONS.hammer.asset,
       pistol: WEAPONS.rail.asset,
       energy: "assets/items/energy-core.png",
+      playerHunter: CORES.hunter.bodyAsset,
+      playerStorm: CORES.storm.bodyAsset,
+      playerBastion: CORES.bastion.bodyAsset,
       enemyMelee: "assets/enemies/melee-drone.png",
       enemyRanged: "assets/enemies/ranged-drone.png",
       enemyBrute: "assets/enemies/brute-drone.png",
@@ -1206,7 +1219,20 @@ export class Game {
       ctx.stroke();
     }
     ctx.restore();
-    this.drawTechBall(ctx, x, y, 74, time, "#4df6ff", 0, "idle");
+    const menuCore = this.images.playerHunter;
+    if (menuCore?.complete && menuCore.naturalWidth) {
+      const width = 74 * PLAYER_SPRITE_SCALE.hunter;
+      const height = width * menuCore.naturalHeight / menuCore.naturalWidth;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(time * 0.08);
+      ctx.shadowColor = "#4df6ff";
+      ctx.shadowBlur = 28;
+      ctx.drawImage(menuCore, -width / 2, -height / 2, width, height);
+      ctx.restore();
+    } else {
+      this.drawTechBall(ctx, x, y, 74, time, "#4df6ff", 0, "idle");
+    }
   }
 
   renderArena(ctx) {
@@ -1344,7 +1370,7 @@ export class Game {
     const weaponPose = this.getHeldWeaponPose(time);
     this.drawWeaponTrails(ctx);
     this.drawHeldWeapon(ctx, weaponPose);
-    this.drawTechBall(ctx, player.x, player.y, player.radius, time, this.run.core.color, player.facing, player.action);
+    this.drawPlayerBody(ctx, time);
 
     const gripAngles = weaponPose.offhandAngle == null
       ? [{ angle: weaponPose.angle, side: 0 }]
@@ -1509,6 +1535,32 @@ export class Game {
     ctx.shadowColor = weapon.color;
     ctx.shadowBlur = alpha < 1 ? 0 : 3;
     ctx.drawImage(image, -anchorX * size, -anchorY * size, size, size);
+    ctx.restore();
+  }
+
+  drawPlayerBody(ctx, time) {
+    const player = this.player;
+    const key = PLAYER_SPRITES[this.run.core.id];
+    const image = this.images[key];
+    if (!image?.complete || !image.naturalWidth) {
+      this.drawTechBall(ctx, player.x, player.y, player.radius, time, this.run.core.color, player.facing, player.action);
+      return;
+    }
+    const width = player.radius * (PLAYER_SPRITE_SCALE[this.run.core.id] || 2.8);
+    const height = width * image.naturalHeight / image.naturalWidth;
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.facing);
+    ctx.shadowColor = this.run.core.color;
+    ctx.shadowBlur = player.action === "skill" ? 28 : player.action === "block" ? 20 : 14;
+    if (player.action === "skill") ctx.filter = "brightness(1.35) saturate(1.18)";
+    else if (player.action === "dash") ctx.filter = "brightness(1.18)";
+    ctx.drawImage(image, -width / 2, -height / 2, width, height);
+    if (player.action === "skill") {
+      ctx.globalAlpha = 0.2;
+      ctx.globalCompositeOperation = "lighter";
+      ctx.drawImage(image, -width / 2, -height / 2, width, height);
+    }
     ctx.restore();
   }
 

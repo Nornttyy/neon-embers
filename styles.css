@@ -314,6 +314,7 @@ h1 span { color: var(--cyan); }
 .core-icon::after { inset: 15px; background: var(--card-color); }
 .core-card h3 { margin-bottom: 6px; font-size: 21px; }
 .core-item-art { width: 76px; height: 76px; margin: -6px 0 17px; object-fit: contain; filter: drop-shadow(0 0 13px color-mix(in srgb, var(--card-color) 50%, transparent)); }
+.core-player-art { width: 92px; height: 78px; margin: -8px 0 15px; object-fit: contain; filter: drop-shadow(0 0 15px color-mix(in srgb, var(--card-color) 48%, transparent)); }
 .core-card .core-subtitle { color: var(--card-color); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
 .core-card p { color: var(--muted); font-size: 13px; line-height: 1.55; }
 .core-card .select-label { position: absolute; bottom: 18px; font-size: 11px; font-weight: 800; color: var(--card-color); }

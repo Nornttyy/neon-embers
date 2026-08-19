@@ -1,4 +1,4 @@
-const CACHE_VERSION = "neon-embers-v10-unified-cyber-art";
+const CACHE_VERSION = "neon-embers-v11-player-core-art";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -14,6 +14,9 @@ const APP_SHELL = [
   "./assets/items/power-hammer.png",
   "./assets/items/phase-twin-blades.png",
   "./assets/items/phase-blade.png",
+  "./assets/players/hunter-core.png",
+  "./assets/players/storm-core.png",
+  "./assets/players/bastion-core.png",
   "./assets/enemies/melee-drone.png",
   "./assets/enemies/ranged-drone.png",
   "./assets/enemies/brute-drone.png",

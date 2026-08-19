@@ -124,7 +124,7 @@ function renderCoreCards() {
     button.type = "button";
     button.style.setProperty("--card-color", core.color);
     button.innerHTML = `
-      ${core.asset ? `<img class="core-item-art" src="${core.asset}" alt="" />` : `<div class="core-icon" aria-hidden="true"></div>`}
+      ${core.bodyAsset ? `<img class="core-player-art" src="${core.bodyAsset}" alt="" />` : core.asset ? `<img class="core-item-art" src="${core.asset}" alt="" />` : `<div class="core-icon" aria-hidden="true"></div>`}
       <span class="core-subtitle">${core.subtitle}</span>
       <h3>${core.name}</h3>
       <p>${core.description}</p>
