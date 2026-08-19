@@ -84,7 +84,7 @@ export const ENEMIES = Object.freeze({
 
 export const UPGRADES = Object.freeze([
   { id: "blade_power", name: "锋刃增压", rarity: "common", max: 5, description: "近战伤害 +18%。", stat: "meleeDamage", amount: 0.18, cost: 22, asset: "assets/items/energy-sword.png" },
-  { id: "blade_reach", name: "延展刃场", rarity: "common", max: 3, description: "近战范围 +12%。", stat: "meleeRange", amount: 0.12, cost: 20, asset: "assets/items/energy-sword.png" },
+  { id: "blade_reach", name: "广域挥击", rarity: "common", max: 3, description: "挥击角度 +8%，武器尺寸不变。", stat: "swingArc", amount: 0.08, cost: 20, asset: "assets/items/energy-sword.png" },
   { id: "blade_speed", name: "动作超频", rarity: "rare", max: 3, description: "近战动作速度 +10%。", stat: "attackSpeed", amount: 0.1, cost: 28 },
   { id: "rail_power", name: "轨道增幅器", rarity: "common", max: 5, description: "轨道手枪伤害 +20%。", stat: "rangedDamage", amount: 0.2, cost: 22, asset: "assets/items/rail-pistol.png" },
   { id: "rail_mag", name: "扩展弹匣", rarity: "rare", max: 3, description: "弹匣容量 +2，并立即装满。", stat: "ammo", amount: 2, cost: 27, asset: "assets/items/rail-pistol.png" },

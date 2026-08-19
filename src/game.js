@@ -32,7 +32,7 @@ export class Game {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: false });
     this.callbacks = callbacks;
-    this.settings = { volume: 0.55, shake: true, reduceFlash: false };
+    this.settings = { volume: 0.55, musicVolume: 0.32, shake: true, reduceFlash: false };
     this.state = "menu";
     this.lastFrame = performance.now();
     this.view = { width: window.innerWidth, height: window.innerHeight, dpr: 1 };
@@ -119,7 +119,8 @@ export class Game {
   applySettings(settings) {
     this.settings = { ...this.settings, ...settings };
     audio.setVolume(this.settings.volume);
-    audio.setEnabled(this.settings.volume > 0);
+    audio.setMusicVolume(this.settings.musicVolume);
+    audio.setEnabled(this.settings.volume > 0 || this.settings.musicVolume > 0);
   }
 
   setTouchVector(x, y) {
@@ -215,6 +216,7 @@ export class Game {
 
   start(coreId = "hunter", meta = {}) {
     audio.unlock();
+    audio.startMusic();
     const core = CORES[coreId] || CORES.hunter;
     const maxHealth = 110 + (core.bonuses.health || 0) + Number(meta.armor || 0) * 8;
     const maxStamina = 100 + (core.bonuses.stamina || 0);
@@ -276,7 +278,7 @@ export class Game {
       stats: {
         meleeDamage: 1 + Number(meta.power || 0) * 0.04,
         rangedDamage: 1 + Number(meta.power || 0) * 0.04,
-        meleeRange: 1,
+        swingArc: 1,
         attackSpeed: 1,
         speed: 1 + (core.bonuses.speed || 0),
         staminaRegen: 1,
@@ -313,6 +315,7 @@ export class Game {
   }
 
   stop() {
+    audio.stopMusic();
     this.state = "menu";
     this.keys.clear();
     this.setTouchVector(0, 0);
@@ -321,6 +324,7 @@ export class Game {
 
   pause(manual = true) {
     if (this.state !== "playing") return;
+    audio.pauseMusic();
     this.state = "paused";
     this.callbacks.onPauseChange?.(true, manual);
   }
@@ -328,6 +332,7 @@ export class Game {
   resume() {
     if (this.state !== "paused") return;
     audio.unlock();
+    audio.resumeMusic();
     this.state = "playing";
     this.lastFrame = performance.now();
     this.callbacks.onPauseChange?.(false, true);
@@ -552,7 +557,6 @@ export class Game {
 
   getWeaponHitShapes(pose) {
     const weapon = WEAPONS[this.run.core.weapon];
-    const scale = this.player.stats.meleeRange * (this.player.action === "attack" && this.player.attackIndex === 2 ? 1.08 : 1);
     const createShape = (angle, side, hand) => {
       const perpendicular = angle + Math.PI / 2;
       const origin = {
@@ -564,15 +568,15 @@ export class Game {
         y: origin.y + Math.sin(angle) * this.player.radius * 0.34,
       };
       const end = {
-        x: origin.x + Math.cos(angle) * weapon.collision.length * scale,
-        y: origin.y + Math.sin(angle) * weapon.collision.length * scale,
+        x: origin.x + Math.cos(angle) * weapon.collision.length,
+        y: origin.y + Math.sin(angle) * weapon.collision.length,
       };
       return {
         hand,
         start,
         end,
-        thickness: weapon.collision.thickness * Math.sqrt(scale),
-        headRadius: weapon.collision.headRadius ? weapon.collision.headRadius * Math.sqrt(scale) : 0,
+        thickness: weapon.collision.thickness,
+        headRadius: weapon.collision.headRadius || 0,
       };
     };
     const primarySide = pose.offhandAngle == null ? 0 : 5;
@@ -803,7 +807,11 @@ export class Game {
     }
     this.spawnBurst(enemy.x, enemy.y, kind === "rail" ? "#b77dff" : "#4df6ff", enemy.boss ? 8 : 4, 110);
     this.shake = Math.max(this.shake, kind === "melee" ? 3.5 : 2);
-    audio.hit(kind);
+    const weaponKind = kind === "melee" ? this.run.core.weapon : kind;
+    audio.hit(weaponKind, {
+      heavy: kind === "melee" && (this.player.attackIndex === 2 || enemy.elite || enemy.boss),
+      killed: enemy.hp <= 0,
+    });
     if (enemy.hp <= 0) this.killEnemy(enemy);
   }
 
@@ -974,7 +982,7 @@ export class Game {
   applyUpgrade(upgrade) {
     const player = this.player;
     if (upgrade.stat === "meleeDamage") player.stats.meleeDamage += upgrade.amount;
-    if (upgrade.stat === "meleeRange") player.stats.meleeRange += upgrade.amount;
+    if (upgrade.stat === "swingArc") player.stats.swingArc += upgrade.amount;
     if (upgrade.stat === "attackSpeed") player.stats.attackSpeed += upgrade.amount;
     if (upgrade.stat === "rangedDamage") player.stats.rangedDamage += upgrade.amount;
     if (upgrade.stat === "ammo") {
@@ -1064,6 +1072,7 @@ export class Game {
     if (!this.run || this.state === "result") return;
     this.run.victory = victory;
     this.state = "result";
+    audio.endRun(victory);
     const coreEnergy = Math.max(1, Math.round((this.run.kills * 0.85 + this.run.energySpent * 0.35 + (victory ? 55 : 0)) * (1 + this.run.metaRecovery * 0.06)));
     this.run.scrap = coreEnergy;
     this.callbacks.onResult?.({
@@ -1347,6 +1356,7 @@ export class Game {
 
   getHeldWeaponPose(time) {
     const player = this.player;
+    const arcScale = player.stats.swingArc || 1;
     const idleMotion = Math.sin(time * 2.2) * 0.035;
     let angle = player.facing + idleMotion;
     let offhandAngle = null;
@@ -1359,14 +1369,14 @@ export class Game {
       const timing = this.getAttackTiming();
       if (isTwin) {
         if (player.attackIndex === 0) {
-          angle = player.facing + this.interpolateSwing(0.24, -1.12, 0.72, timing);
+          angle = player.facing + this.interpolateSwing(0.24, -1.12 * arcScale, 0.72 * arcScale, timing);
           offhandAngle = player.facing - 0.32;
         } else if (player.attackIndex === 1) {
           angle = player.facing + 0.32;
-          offhandAngle = player.facing + this.interpolateSwing(-0.24, 1.12, -0.72, timing);
+          offhandAngle = player.facing + this.interpolateSwing(-0.24, 1.12 * arcScale, -0.72 * arcScale, timing);
         } else {
-          angle = player.facing + this.interpolateSwing(0.24, -1.28, 1.02, timing);
-          offhandAngle = player.facing + this.interpolateSwing(-0.24, 1.28, -1.02, timing);
+          angle = player.facing + this.interpolateSwing(0.24, -1.28 * arcScale, 1.02 * arcScale, timing);
+          offhandAngle = player.facing + this.interpolateSwing(-0.24, 1.28 * arcScale, -1.02 * arcScale, timing);
         }
       } else {
         const swings = [
@@ -1375,7 +1385,7 @@ export class Game {
           [-0.76, 1.12],
         ];
         const [start, end] = swings[player.attackIndex] || swings[0];
-        angle = player.facing + this.interpolateSwing(0, start, end, timing);
+        angle = player.facing + this.interpolateSwing(0, start * arcScale, end * arcScale, timing);
       }
     } else if (player.action === "block") {
       angle = player.facing + 1.28;
@@ -1412,7 +1422,6 @@ export class Game {
     const weapon = WEAPONS[this.run.core.weapon];
     const image = this.images[weapon.id];
     if (!image?.complete || !image.naturalWidth || !weapon.render) return;
-    const attackScale = this.player.action === "attack" && this.player.attackIndex === 2 ? 1.08 : 1;
     const isAttacking = this.player.action === "attack";
     const combo = this.player.attackIndex;
     const primarySide = pose.offhandAngle == null ? 0 : 5;
@@ -1422,17 +1431,17 @@ export class Game {
       const primaryDirection = combo === 1 ? -1 : 1;
       const offhandDirection = -1;
       if (primaryActive) {
-        this.drawWeaponSprite(ctx, image, weapon, pose.angle - primaryDirection * 0.14, primarySide, 0.12, attackScale);
+        this.drawWeaponSprite(ctx, image, weapon, pose.angle - primaryDirection * 0.14, primarySide, 0.12);
       }
       if (offhandActive) {
-        this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle - offhandDirection * 0.14, -5, 0.12, attackScale);
+        this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle - offhandDirection * 0.14, -5, 0.12);
       }
     }
-    this.drawWeaponSprite(ctx, image, weapon, pose.angle, primarySide, 1, attackScale);
-    if (pose.offhandAngle != null) this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle, -5, 1, attackScale);
+    this.drawWeaponSprite(ctx, image, weapon, pose.angle, primarySide, 1);
+    if (pose.offhandAngle != null) this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle, -5, 1);
   }
 
-  drawWeaponSprite(ctx, image, weapon, angle, sideOffset, alpha, scale) {
+  drawWeaponSprite(ctx, image, weapon, angle, sideOffset, alpha) {
     const { size, anchorX, anchorY, rotation } = weapon.render;
     ctx.save();
     ctx.globalAlpha *= alpha;
@@ -1442,7 +1451,6 @@ export class Game {
       this.player.y + Math.sin(angle + Math.PI / 2) * sideOffset,
     );
     ctx.rotate(angle);
-    ctx.scale(scale, scale);
     ctx.rotate(rotation);
     ctx.shadowColor = weapon.color;
     ctx.shadowBlur = alpha < 1 ? 0 : 3;

@@ -13,7 +13,7 @@ const DEFAULT_SAVE = Object.freeze({
   guideSeen: false,
   lastCore: "hunter",
   meta: { power: 0, armor: 0, recovery: 0 },
-  settings: { volume: 0.55, shake: true, reduceFlash: false },
+  settings: { volume: 0.55, musicVolume: 0.32, shake: true, reduceFlash: false },
 });
 
 function loadSave() {
@@ -282,6 +282,7 @@ function returnToMenu() {
 function openSettings() {
   settingsReturnScreen = currentScreen === "game" ? "menu-screen" : currentScreen;
   byId("volume-input").value = profile.settings.volume;
+  byId("music-volume-input").value = profile.settings.musicVolume;
   byId("shake-input").checked = profile.settings.shake;
   byId("flash-input").checked = profile.settings.reduceFlash;
   showScreen("settings-screen");
@@ -314,7 +315,12 @@ for (const button of document.querySelectorAll("[data-back]")) {
 
 byId("volume-input").addEventListener("input", (event) => {
   profile.settings.volume = Number(event.target.value);
-  audio.setVolume(profile.settings.volume);
+  game.applySettings(profile.settings);
+  saveProfile();
+});
+byId("music-volume-input").addEventListener("input", (event) => {
+  profile.settings.musicVolume = Number(event.target.value);
+  game.applySettings(profile.settings);
   saveProfile();
 });
 byId("shake-input").addEventListener("change", (event) => {
@@ -419,7 +425,7 @@ renderProfile();
 void adService.isAvailable();
 
 if (["127.0.0.1", "localhost"].includes(window.location.hostname)) {
-  window.__NEON_DEBUG__ = { game, beginRun };
+  window.__NEON_DEBUG__ = { game, beginRun, audio };
 }
 
 const previewCore = new URLSearchParams(window.location.search).get("autostart");
