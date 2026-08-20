@@ -1,6 +1,6 @@
-import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=e5f35dc50966";
-import { audio } from "./audio.js?v=e5f35dc50966";
-import { assetUrl } from "./revision.js?v=e5f35dc50966";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=2d2113e208de";
+import { audio } from "./audio.js?v=2d2113e208de";
+import { assetUrl } from "./revision.js?v=2d2113e208de";
 
 const TAU = Math.PI * 2;
 const MAX_ASSET_LOAD_ATTEMPTS = 3;

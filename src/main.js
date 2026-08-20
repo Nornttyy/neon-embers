@@ -1,8 +1,8 @@
-import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=e5f35dc50966";
-import { audio } from "./audio.js?v=e5f35dc50966";
-import { adService } from "./ad-service.js?v=e5f35dc50966";
-import { Game } from "./game.js?v=e5f35dc50966";
-import { ASSET_REVISION, assetUrl } from "./revision.js?v=e5f35dc50966";
+import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=2d2113e208de";
+import { audio } from "./audio.js?v=2d2113e208de";
+import { adService } from "./ad-service.js?v=2d2113e208de";
+import { Game } from "./game.js?v=2d2113e208de";
+import { ASSET_REVISION, assetUrl } from "./revision.js?v=2d2113e208de";
 
 const SAVE_KEY = "neon-embers-save-v1";
 const SW_REFRESH_KEY = "neon-embers-sw-refresh";
@@ -47,7 +47,6 @@ let resetArmedUntil = 0;
 let toastTimer = 0;
 let loadingForRun = false;
 let runtimeAssetsReady = false;
-let offlineCacheReady = Promise.resolve();
 const offlineCacheState = { loaded: 0, total: 0, failed: [], ready: false };
 
 const byId = (id) => document.getElementById(id);
@@ -362,10 +361,9 @@ const game = new Game(byId("game-canvas"), {
   onResult: showResult,
 });
 
-game.assetsReady.then(async () => {
+game.assetsReady.then(() => {
   runtimeAssetsReady = true;
   if (!offlineCacheState.ready && offlineCacheState.total) renderOfflineCacheProgress(offlineCacheState);
-  await offlineCacheReady;
   if (!loadingForRun) hideLoadingScreen();
 });
 
@@ -373,7 +371,7 @@ async function beginRun(coreId) {
   loadingForRun = true;
   showLoadingScreen("同步战斗音频", 97);
   audio.unlock();
-  await Promise.all([game.assetsReady, offlineCacheReady]);
+  await game.assetsReady;
   await audio.loadSamples();
   profile.lastCore = coreId;
   profile.guideSeen = true;
@@ -574,18 +572,21 @@ if ("serviceWorker" in navigator && (window.location.protocol === "https:" || ["
       worker.addEventListener("statechange", finish);
     });
   };
-  offlineCacheReady = navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
-    .then(async (registration) => {
-      try { await registration.update(); } catch {
-        // The worker already installing from register() can still complete normally.
-      }
-      await waitForInstall(registration);
-      offlineCacheState.ready = true;
-      return true;
-    })
-    .catch(() => {
-      // Offline support is optional; a registration failure must never block the game.
-      offlineCacheState.ready = true;
-      return false;
-    });
+  const windowLoadReady = document.readyState === "complete"
+    ? Promise.resolve()
+    : new Promise((resolve) => window.addEventListener("load", resolve, { once: true }));
+  void Promise.all([game.assetsReady, windowLoadReady]).then(() => {
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
+      .then(async (registration) => {
+        try { await registration.update(); } catch {
+          // The worker already installing from register() can still complete normally.
+        }
+        await waitForInstall(registration);
+        offlineCacheState.ready = true;
+      })
+      .catch(() => {
+        // Offline support is optional; a registration failure must never block the game.
+        offlineCacheState.ready = true;
+      });
+  });
 }

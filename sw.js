@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "neon-embers-";
-const ASSET_REVISION = "e5f35dc50966";
+const ASSET_REVISION = "2d2113e208de";
 const CACHE_VERSION = `${CACHE_PREFIX}${ASSET_REVISION}`;
 const PRECACHE_CONCURRENCY = 4;
 const versioned = (path) => `${path}?v=${ASSET_REVISION}`;

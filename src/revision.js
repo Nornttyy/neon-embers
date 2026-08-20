@@ -1,4 +1,4 @@
-export const ASSET_REVISION = "e5f35dc50966";
+export const ASSET_REVISION = "2d2113e208de";
 
 export function assetUrl(path) {
   const separator = path.includes("?") ? "&" : "?";
