@@ -1,6 +1,6 @@
-import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=2d2113e208de";
-import { audio } from "./audio.js?v=2d2113e208de";
-import { assetUrl } from "./revision.js?v=2d2113e208de";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=e41b17a4330b";
+import { audio } from "./audio.js?v=e41b17a4330b";
+import { assetUrl } from "./revision.js?v=e41b17a4330b";
 
 const TAU = Math.PI * 2;
 const MAX_ASSET_LOAD_ATTEMPTS = 3;
@@ -13,6 +13,9 @@ const WEAPON_TIP_TRAIL_CAPACITY = 11;
 const WEAPON_TIP_TRAIL_SAMPLE_INTERVAL = 1 / 90;
 const WEAPON_TIP_TRAIL_LIFETIME = 0.17;
 const WEAPON_TIP_TRAIL_HANDS = Object.freeze(["primary", "offhand"]);
+const WEAPON_SLOT_MELEE = 1;
+const WEAPON_SLOT_RANGED = 2;
+const WEAPON_SWITCH_LOCKED_ACTIONS = Object.freeze(["attack", "block", "dash", "broken", "skill"]);
 const FILTERED_SPRITE_VARIANTS = Object.freeze({
   enemyHit: Object.freeze({ filter: "brightness(2.1) saturate(.35)", imageKeys: Object.freeze([
     "enemyMelee", "skitterDrone", "lancerDrone", "enemyRanged",
@@ -588,9 +591,9 @@ export class Game {
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault();
       this.keys.add(key);
       if (event.repeat) return;
-      if (key === "j") this.requestAttack();
+      if (key === "1" || key === "2") this.selectWeaponSlot(Number(key));
+      if (key === "j") this.requestPrimaryAttack();
       if (key === "k") this.setBlocking(true);
-      if (key === "q") this.requestRanged();
       if (key === "e") this.requestSkill();
       if (key === " ") this.requestDash();
       if (key === "escape" || key === "p") this.togglePause();
@@ -608,7 +611,7 @@ export class Game {
     this.canvas.addEventListener("pointerdown", (event) => {
       if (this.state !== "playing") return;
       audio.unlock();
-      if (event.button === 0) this.requestAttack();
+      if (event.button === 0) this.requestPrimaryAttack();
       if (event.button === 2) this.setBlocking(true);
     });
     window.addEventListener("pointerup", (event) => {
@@ -660,9 +663,61 @@ export class Game {
     if (!active && this.player.action === "block") this.player.action = "idle";
   }
 
+  selectWeaponSlot(slot) {
+    if (!this.player || !this.run || !["playing", "room"].includes(this.state)) return false;
+    const nextSlot = Number(slot);
+    if (nextSlot !== WEAPON_SLOT_MELEE && nextSlot !== WEAPON_SLOT_RANGED) return false;
+    if (nextSlot === this.player.activeWeaponSlot) {
+      this.player.pendingWeaponSlot = null;
+      return true;
+    }
+    if (this.state === "playing" && WEAPON_SWITCH_LOCKED_ACTIONS.includes(this.player.action)) {
+      this.player.pendingWeaponSlot = nextSlot;
+      return true;
+    }
+    this.applyWeaponSlot(nextSlot);
+    return true;
+  }
+
+  applyWeaponSlot(slot) {
+    if (!this.player || !this.run?.weaponSlots?.[slot - 1]) return false;
+    this.player.activeWeaponSlot = slot;
+    this.player.pendingWeaponSlot = null;
+    this.player.comboQueued = false;
+    if (slot === WEAPON_SLOT_MELEE) this.player.rangedPoseTimer = 0;
+    for (const hand of WEAPON_TIP_TRAIL_HANDS) {
+      const trail = this.weaponTipTrails?.[hand];
+      if (!trail) continue;
+      trail.start = 0;
+      trail.count = 0;
+      trail.sampleTimer = WEAPON_TIP_TRAIL_SAMPLE_INTERVAL;
+    }
+    this.emitHud(true);
+    return true;
+  }
+
+  applyPendingWeaponSlot() {
+    const player = this.player;
+    if (!player?.pendingWeaponSlot || player.action !== "idle") return false;
+    return this.applyWeaponSlot(player.pendingWeaponSlot);
+  }
+
+  requestPrimaryAttack() {
+    if (this.player?.action === "block") {
+      this.player.blockHeld = false;
+      this.player.action = "idle";
+    }
+    if (this.player?.activeWeaponSlot === WEAPON_SLOT_RANGED) this.requestRanged();
+    else this.requestAttack();
+  }
+
   requestAttack() {
     if (this.state !== "playing" || !this.player) return;
     const player = this.player;
+    if (player.activeWeaponSlot !== WEAPON_SLOT_MELEE) {
+      this.selectWeaponSlot(WEAPON_SLOT_MELEE);
+      if (player.activeWeaponSlot !== WEAPON_SLOT_MELEE) return;
+    }
     if (player.action === "attack") {
       player.comboQueued = true;
       return;
@@ -747,6 +802,7 @@ export class Game {
     this.run = {
       coreId: core.id,
       core,
+      weaponSlots: [core.weapon, "rail"],
       elapsed: 0,
       spawnTimer: 0.55,
       kills: 0,
@@ -782,6 +838,8 @@ export class Game {
       attackIndex: 0,
       attackHit: new Set(),
       comboQueued: false,
+      activeWeaponSlot: WEAPON_SLOT_MELEE,
+      pendingWeaponSlot: null,
       blockHeld: false,
       parryTimer: 0,
       invulnerable: 0,
@@ -1111,12 +1169,14 @@ export class Game {
     if (player.staminaDelay <= 0 && player.action !== "block") {
       player.stamina = Math.min(player.maxStamina, player.stamina + 31 * player.stats.staminaRegen * dt);
     }
+    this.applyPendingWeaponSlot();
   }
 
   startAttack(index) {
     const player = this.player;
     const combo = WEAPONS[this.run.core.weapon].combo;
     const overdrive = player.overdrive > 0 ? 1.3 : 1;
+    player.rangedPoseTimer = 0;
     player.action = "attack";
     player.attackIndex = index;
     player.attackTimer = 0;
@@ -1314,6 +1374,8 @@ export class Game {
     this.player.y = GAME.height / 2;
     this.player.action = "idle";
     this.player.blockHeld = false;
+    this.player.rangedPoseTimer = 0;
+    this.applyPendingWeaponSlot();
     this.camera.x = this.player.x;
     this.camera.y = this.player.y;
     this.state = "room";
@@ -1783,8 +1845,8 @@ export class Game {
       skill: 1 - clamp(player.skillCooldown / (8 * player.stats.skillCooldown), 0, 1),
       action: player.action,
       weapons: [
-        { id: melee.id, name: melee.name, color: melee.color, asset: melee.asset },
-        { id: "rail", name: WEAPONS.rail.name, color: WEAPONS.rail.color, asset: WEAPONS.rail.asset, ammo: `${player.ammo}/${player.maxAmmo}` },
+        { slot: WEAPON_SLOT_MELEE, id: melee.id, name: melee.name, color: melee.color, asset: melee.asset, active: player.activeWeaponSlot === WEAPON_SLOT_MELEE },
+        { slot: WEAPON_SLOT_RANGED, id: "rail", name: WEAPONS.rail.name, color: WEAPONS.rail.color, asset: WEAPONS.rail.asset, ammo: `${player.ammo}/${player.maxAmmo}`, active: player.activeWeaponSlot === WEAPON_SLOT_RANGED },
       ],
       boss: this.run.boss && !this.run.boss.dead ? { name: this.run.boss.name, ratio: Math.max(0, this.run.boss.hp / this.run.boss.maxHp) } : null,
     });
@@ -2214,14 +2276,20 @@ export class Game {
       });
     }
     const weaponPose = this.getHeldWeaponPose(time);
-    this.drawWeaponTipTrails(ctx);
-    this.drawHeldWeapon(ctx, weaponPose);
-    if (player.rangedPoseTimer > 0) this.drawRangedPistol(ctx);
+    const showingPistol = player.activeWeaponSlot === WEAPON_SLOT_RANGED || player.rangedPoseTimer > 0;
+    if (showingPistol) {
+      this.drawRangedPistol(ctx);
+    } else {
+      this.drawWeaponTipTrails(ctx);
+      this.drawHeldWeapon(ctx, weaponPose);
+    }
     this.drawPlayerBody(ctx, time);
 
-    const gripAngles = weaponPose.offhandAngle == null
-      ? [{ angle: weaponPose.angle, side: 0 }]
-      : [{ angle: weaponPose.angle, side: 5 }, { angle: weaponPose.offhandAngle, side: -5 }];
+    const gripAngles = showingPistol
+      ? [{ angle: player.facing, side: -6 }]
+      : weaponPose.offhandAngle == null
+        ? [{ angle: weaponPose.angle, side: 0 }]
+        : [{ angle: weaponPose.angle, side: 5 }, { angle: weaponPose.offhandAngle, side: -5 }];
     for (const grip of gripAngles) {
       ctx.save();
       ctx.translate(

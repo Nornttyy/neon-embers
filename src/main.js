@@ -1,8 +1,8 @@
-import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=2d2113e208de";
-import { audio } from "./audio.js?v=2d2113e208de";
-import { adService } from "./ad-service.js?v=2d2113e208de";
-import { Game } from "./game.js?v=2d2113e208de";
-import { ASSET_REVISION, assetUrl } from "./revision.js?v=2d2113e208de";
+import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=e41b17a4330b";
+import { audio } from "./audio.js?v=e41b17a4330b";
+import { adService } from "./ad-service.js?v=e41b17a4330b";
+import { Game } from "./game.js?v=e41b17a4330b";
+import { ASSET_REVISION, assetUrl } from "./revision.js?v=e41b17a4330b";
 
 const SAVE_KEY = "neon-embers-save-v1";
 const SW_REFRESH_KEY = "neon-embers-sw-refresh";
@@ -277,13 +277,14 @@ function renderHud(data) {
   elements.dashFill.style.width = `${data.dash * 100}%`;
   elements.skillFill.style.width = `${data.skill * 100}%`;
 
-  const signature = data.weapons.map((weapon) => `${weapon.id}:${weapon.ammo || ""}`).join("|");
+  const signature = data.weapons.map((weapon) => `${weapon.slot}:${weapon.id}:${weapon.ammo || ""}:${weapon.active ? 1 : 0}`).join("|");
   if (elements.weaponDock.dataset.signature !== signature) {
     elements.weaponDock.dataset.signature = signature;
     elements.weaponDock.innerHTML = data.weapons.map((weapon) => `
-      <div class="weapon-chip" style="--weapon-color:${weapon.color}" title="${weapon.name} · 固定装备">
+      <div class="weapon-chip${weapon.active ? " is-active" : ""}" data-slot="${weapon.slot}" style="--weapon-color:${weapon.color}" role="listitem" aria-current="${weapon.active ? "true" : "false"}" aria-keyshortcuts="${weapon.slot}" title="按 ${weapon.slot} 选择 ${weapon.name}">
+        <kbd class="weapon-slot-key">${weapon.slot}</kbd>
         ${weapon.asset ? `<img src="${assetUrl(weapon.asset)}" alt="" />` : `<b>${weapon.name.slice(0, 2)}</b>`}
-        <span>${weapon.ammo || "固定"}</span>
+        <span>${weapon.ammo || (weapon.active ? "已装备" : "近战")}</span>
       </div>
     `).join("");
   }
@@ -518,7 +519,7 @@ function releaseJoystick(event) {
 joystickZone.addEventListener("pointerup", releaseJoystick);
 joystickZone.addEventListener("pointercancel", releaseJoystick);
 byId("touch-dash").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestDash(); });
-byId("touch-attack").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestAttack(); });
+byId("touch-attack").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestPrimaryAttack(); });
 byId("touch-ranged").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestRanged(); });
 byId("touch-skill").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestSkill(); });
 byId("touch-block").addEventListener("pointerdown", (event) => { event.preventDefault(); game.setBlocking(true); });

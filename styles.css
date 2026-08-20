@@ -489,10 +489,12 @@ h1 span { color: var(--cyan); }
 .hud-top-right strong { font-size: 17px; }
 .hud-pause { font-weight: 900; }
 .weapon-dock { position: absolute; left: 24px; bottom: 24px; display: flex; gap: 7px; }
-.weapon-chip { position: relative; width: 64px; height: 58px; padding: 6px; border: 1px solid rgba(100,190,220,.17); background: rgba(4,10,22,.78); clip-path: polygon(0 0, 80% 0, 100% 20%, 100% 100%, 0 100%); }
+.weapon-chip { position: relative; width: 64px; height: 58px; padding: 6px; border: 1px solid rgba(100,190,220,.17); background: rgba(4,10,22,.78); opacity: .68; clip-path: polygon(0 0, 80% 0, 100% 20%, 100% 100%, 0 100%); transition: opacity .12s, border-color .12s, background .12s, filter .12s; }
+.weapon-chip.is-active { opacity: 1; border-color: var(--weapon-color); background: linear-gradient(145deg, rgba(18,42,63,.96), rgba(4,10,22,.92)); filter: drop-shadow(0 0 7px var(--weapon-color)); }
 .weapon-chip b { display: block; color: var(--weapon-color); font-size: 11px; }
 .weapon-chip img { width: 38px; height: 38px; display: block; margin: -3px auto 0; object-fit: contain; filter: drop-shadow(0 0 7px var(--weapon-color)); }
 .weapon-chip span { position: absolute; right: 5px; bottom: 4px; display: block; color: #dcecff; font-size: 8px; font-weight: 850; text-shadow: 0 1px 3px #000; }
+.weapon-chip .weapon-slot-key { position: absolute; left: 4px; top: 4px; z-index: 1; min-width: 16px; padding: 2px 4px; border-color: var(--weapon-color); color: #efffff; font-size: 9px; font-weight: 900; line-height: 1; text-align: center; }
 .action-indicators { position: absolute; right: 24px; bottom: 27px; display: grid; gap: 7px; }
 .dash-indicator, .skill-indicator { display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--muted); font-size: 9px; font-weight: 800; }
 .dash-indicator i, .skill-indicator i { width: 76px; height: 5px; background: rgba(255,255,255,.09); }
@@ -585,7 +587,9 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
   .level-badge strong { font-size: 17px; }
   .weapon-dock { left: 50%; bottom: 15px; transform: translateX(-50%); }
   .weapon-chip { width: 42px; height: 39px; padding: 5px; }
+  .weapon-chip img { width: 30px; height: 30px; margin: -1px auto 0; }
   .weapon-chip span { display: none; }
+  .weapon-chip .weapon-slot-key { display: none; }
   .action-indicators { display: none; }
   .boss-bar { bottom: 72px; width: 70vw; }
   .touch-controls.is-active { display: block; }
