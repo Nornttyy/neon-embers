@@ -1,3 +1,5 @@
+import { assetUrl } from "./revision.js?v=74bfda676dbb";
+
 export class AudioEngine {
   constructor() {
     this.context = null;
@@ -134,7 +136,7 @@ export class AudioEngine {
     };
     this.sampleLoadPromise = Promise.all(Object.entries(files).flatMap(([group, names]) => names.map(async (name) => {
       try {
-        const response = await fetch(`assets/audio/${name}`);
+        const response = await fetch(assetUrl(`assets/audio/${name}`));
         if (!response.ok) return;
         const buffer = await this.context.decodeAudioData(await response.arrayBuffer());
         this.sampleBuffers[group].push(buffer);

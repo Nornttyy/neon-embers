@@ -1,7 +1,10 @@
-import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js";
-import { audio } from "./audio.js";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=74bfda676dbb";
+import { audio } from "./audio.js?v=74bfda676dbb";
+import { assetUrl } from "./revision.js?v=74bfda676dbb";
 
 const TAU = Math.PI * 2;
+const MAX_ASSET_LOAD_ATTEMPTS = 3;
+const ASSET_RETRY_DELAY = 140;
 const PLAYER_SPRITES = Object.freeze({
   hunter: "playerHunter",
   storm: "playerStorm",
@@ -78,7 +81,13 @@ export class Game {
       x: Math.random(), y: Math.random(), size: randomBetween(0.5, 2.1), phase: Math.random() * TAU,
     }));
     this.images = {};
-    for (const [id, path] of Object.entries({
+    this.assetLoadState = { ready: false, loaded: 0, failed: [] };
+    const assetEntries = Object.entries({
+      vfxSlash: "assets/effects/slash-arc.png",
+      vfxImpact: "assets/effects/bullet-impact.png",
+      vfxBlock: "assets/effects/block-shield.png",
+      vfxDash: "assets/effects/dash-streak.png",
+      vfxBoss: "assets/effects/boss-burst.png",
       blade: WEAPONS.blade.asset,
       twin: WEAPONS.twin.asset,
       hammer: WEAPONS.hammer.asset,
@@ -94,19 +103,56 @@ export class Game {
       enemyElite: "assets/enemies/elite-drone.png",
       enemyBoss: "assets/enemies/boss-drone.png",
       pylon: "assets/world/arena-pylon.png",
-      vfxSlash: "assets/effects/slash-arc.png",
-      vfxImpact: "assets/effects/bullet-impact.png",
-      vfxBlock: "assets/effects/block-shield.png",
-      vfxDash: "assets/effects/dash-streak.png",
-      vfxBoss: "assets/effects/boss-burst.png",
-    })) {
-      const image = new Image();
-      image.src = path;
-      this.images[id] = image;
-    }
+    });
+    this.assetLoadState.total = assetEntries.length;
+    this.assetsReady = Promise.all(assetEntries.map(([id, path]) => this.loadImageAsset(id, path)))
+      .then(() => {
+        this.assetLoadState.ready = true;
+        return this.assetLoadState;
+      });
     this.resize();
     this.bindInput();
     requestAnimationFrame((time) => this.frame(time));
+  }
+
+  loadImageAsset(id, path) {
+    const image = new Image();
+    image.decoding = "async";
+    image.fetchPriority = id.startsWith("vfx") || id.startsWith("player") ? "high" : "auto";
+    this.images[id] = image;
+
+    return new Promise((resolve) => {
+      let attempts = 0;
+      let settled = false;
+      const finish = (loaded) => {
+        if (settled) return;
+        settled = true;
+        if (loaded) this.assetLoadState.loaded += 1;
+        else this.assetLoadState.failed.push(id);
+        resolve({ id, loaded });
+      };
+      const request = () => {
+        attempts += 1;
+        const retry = attempts > 1 ? `&retry=${attempts}` : "";
+        image.src = `${assetUrl(path)}${retry}`;
+      };
+      image.addEventListener("load", async () => {
+        if (typeof image.decode === "function") {
+          try { await image.decode(); } catch {
+            // A decoded image with valid dimensions is still safe for Canvas.
+          }
+        }
+        finish(image.naturalWidth > 0);
+      });
+      image.addEventListener("error", () => {
+        if (attempts < MAX_ASSET_LOAD_ATTEMPTS) {
+          window.setTimeout(request, ASSET_RETRY_DELAY * attempts);
+        } else {
+          finish(false);
+        }
+      });
+      request();
+    });
   }
 
   bindInput() {

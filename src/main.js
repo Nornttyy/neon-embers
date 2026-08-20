@@ -1,9 +1,18 @@
-import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js";
-import { audio } from "./audio.js";
-import { adService } from "./ad-service.js";
-import { Game } from "./game.js";
+import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=74bfda676dbb";
+import { audio } from "./audio.js?v=74bfda676dbb";
+import { adService } from "./ad-service.js?v=74bfda676dbb";
+import { Game } from "./game.js?v=74bfda676dbb";
+import { ASSET_REVISION, assetUrl } from "./revision.js?v=74bfda676dbb";
 
 const SAVE_KEY = "neon-embers-save-v1";
+const SW_REFRESH_KEY = "neon-embers-sw-refresh";
+
+const refreshedUrl = new URL(window.location.href);
+if (refreshedUrl.searchParams.has("_sw")) {
+  refreshedUrl.searchParams.delete("_sw");
+  window.history.replaceState(null, "", `${refreshedUrl.pathname}${refreshedUrl.search}${refreshedUrl.hash}`);
+}
+
 const DEFAULT_SAVE = Object.freeze({
   version: 1,
   scrap: 0,
@@ -132,7 +141,7 @@ function renderCoreCards() {
     button.type = "button";
     button.style.setProperty("--card-color", core.color);
     button.innerHTML = `
-      ${core.bodyAsset ? `<img class="core-player-art" src="${core.bodyAsset}" alt="" />` : core.asset ? `<img class="core-item-art" src="${core.asset}" alt="" />` : `<div class="core-icon" aria-hidden="true"></div>`}
+      ${core.bodyAsset ? `<img class="core-player-art" src="${assetUrl(core.bodyAsset)}" alt="" />` : core.asset ? `<img class="core-item-art" src="${assetUrl(core.asset)}" alt="" />` : `<div class="core-icon" aria-hidden="true"></div>`}
       <span class="core-subtitle">${core.subtitle}</span>
       <h3>${core.name}</h3>
       <p>${core.description}</p>
@@ -200,7 +209,7 @@ function renderHud(data) {
     elements.weaponDock.dataset.signature = signature;
     elements.weaponDock.innerHTML = data.weapons.map((weapon) => `
       <div class="weapon-chip" style="--weapon-color:${weapon.color}" title="${weapon.name} · 固定装备">
-        ${weapon.asset ? `<img src="${weapon.asset}" alt="" />` : `<b>${weapon.name.slice(0, 2)}</b>`}
+        ${weapon.asset ? `<img src="${assetUrl(weapon.asset)}" alt="" />` : `<b>${weapon.name.slice(0, 2)}</b>`}
         <span>${weapon.ammo || "固定"}</span>
       </div>
     `).join("");
@@ -278,7 +287,8 @@ const game = new Game(byId("game-canvas"), {
   onResult: showResult,
 });
 
-function beginRun(coreId) {
+async function beginRun(coreId) {
+  await game.assetsReady;
   profile.lastCore = coreId;
   profile.guideSeen = true;
   saveProfile();
@@ -440,9 +450,22 @@ if (previewCore && CORES[previewCore]) {
 }
 
 if ("serviceWorker" in navigator && (window.location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(window.location.hostname))) {
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let refreshingForUpdate = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || refreshingForUpdate) return;
+    if (window.sessionStorage.getItem(SW_REFRESH_KEY) === ASSET_REVISION) return;
+    refreshingForUpdate = true;
+    window.sessionStorage.setItem(SW_REFRESH_KEY, ASSET_REVISION);
+    const updateUrl = new URL(window.location.href);
+    updateUrl.searchParams.set("_sw", Date.now().toString(36));
+    window.location.replace(updateUrl);
+  });
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {
-      // Offline support is optional; a registration failure must never block the game.
-    });
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
+      .then((registration) => registration.update())
+      .catch(() => {
+        // Offline support is optional; a registration failure must never block the game.
+      });
   });
 }
