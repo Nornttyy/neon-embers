@@ -1,4 +1,4 @@
-const CACHE_VERSION = "neon-embers-v15-room-stage-separation";
+const CACHE_VERSION = "neon-embers-v16-generated-vfx";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -24,6 +24,11 @@ const APP_SHELL = [
   "./assets/enemies/elite-drone.png",
   "./assets/enemies/boss-drone.png",
   "./assets/world/arena-pylon.png",
+  "./assets/effects/slash-arc.png",
+  "./assets/effects/bullet-impact.png",
+  "./assets/effects/block-shield.png",
+  "./assets/effects/dash-streak.png",
+  "./assets/effects/boss-burst.png",
   "./assets/audio/swing-whoosh-1.wav",
   "./assets/audio/swing-whoosh-2.wav",
   "./assets/audio/bullet-impact.wav",

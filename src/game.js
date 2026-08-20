@@ -94,6 +94,11 @@ export class Game {
       enemyElite: "assets/enemies/elite-drone.png",
       enemyBoss: "assets/enemies/boss-drone.png",
       pylon: "assets/world/arena-pylon.png",
+      vfxSlash: "assets/effects/slash-arc.png",
+      vfxImpact: "assets/effects/bullet-impact.png",
+      vfxBlock: "assets/effects/block-shield.png",
+      vfxDash: "assets/effects/dash-streak.png",
+      vfxBoss: "assets/effects/boss-burst.png",
     })) {
       const image = new Image();
       image.src = path;
@@ -569,6 +574,11 @@ export class Game {
         player.dashCooldown = GAME.dashCooldown * player.stats.dashCooldown;
         player.dashVector = dashDirection;
         player.invulnerable = GAME.dashDuration + 0.05;
+        this.effects.push({
+          type: "dashSprite", x: player.x, y: player.y,
+          angle: Math.atan2(dashDirection.y, dashDirection.x),
+          radius: 176, life: 0.24, maxLife: 0.24, color: this.run.core.color,
+        });
         this.spawnBurst(player.x, player.y, "#4df6ff", 14, 190);
         audio.dash();
       }
@@ -627,6 +637,7 @@ export class Game {
     player.attackTimer = 0;
     player.attackDuration = combo[index].duration / (player.stats.attackSpeed * overdrive);
     player.attackHit = new Set();
+    player.attackVfxFired = false;
     player.comboQueued = false;
     if (combo[index].lunge) {
       player.x = clamp(player.x + Math.cos(player.facing) * combo[index].lunge, 42, GAME.width - 42);
@@ -641,6 +652,21 @@ export class Game {
     const speedMultiplier = moveDefinition.duration / player.attackDuration;
     player.attackTimer += dt;
     const definitionTime = player.attackTimer * speedMultiplier;
+    if (!player.attackVfxFired && definitionTime >= moveDefinition.activeStart) {
+      player.attackVfxFired = true;
+      if (this.run.core.weapon !== "hammer") {
+        const pose = this.getHeldWeaponPose(this.run.elapsed);
+        for (const shape of this.getActiveWeaponShapes(pose)) {
+          this.effects.push({
+            type: "slashSprite", x: player.x, y: player.y,
+            angle: Math.atan2(shape.end.y - shape.start.y, shape.end.x - shape.start.x),
+            radius: moveDefinition.range * (this.run.core.weapon === "twin" ? 2.2 : 2.45),
+            life: 0.22, maxLife: 0.22, color: this.run.core.color,
+            flipY: shape.hand === "offhand",
+          });
+        }
+      }
+    }
     if (definitionTime >= moveDefinition.activeStart && definitionTime <= moveDefinition.activeEnd) this.performMeleeHit(moveDefinition);
     if (player.attackTimer >= player.attackDuration) {
       if (player.comboQueued && player.attackIndex < 2) this.startAttack(player.attackIndex + 1);
@@ -729,6 +755,7 @@ export class Game {
         run.bossSpawned = true;
         run.boss = enemy;
         this.callbacks.onAnnouncement?.({ title: "零号执行体", subtitle: "最终目标已进入核心战区" });
+        this.effects.push({ type: "bossBurst", x: enemy.x, y: enemy.y, angle: 0, radius: 270, life: 0.72, maxLife: 0.72, color: enemy.color });
         this.flash = this.settings.reduceFlash ? 0.1 : 0.4;
         this.shake = 16;
         audio.explosion();
@@ -1638,8 +1665,9 @@ export class Game {
       }
     }
     ctx.globalAlpha = 1;
-    if (behind) return;
     for (const effect of this.effects) {
+      const drawsBehind = ["dashSprite", "slashSprite", "bossBurst"].includes(effect.type);
+      if (drawsBehind !== behind) continue;
       const alpha = clamp(effect.life / effect.maxLife, 0, 1);
       ctx.globalAlpha = alpha;
       ctx.strokeStyle = effect.color;
@@ -1647,11 +1675,36 @@ export class Game {
       ctx.lineWidth = 3 + alpha * 4;
       ctx.shadowColor = effect.color;
       ctx.shadowBlur = 12;
-      if (effect.type === "ring") {
+      if (effect.type === "dashSprite") {
+        this.drawVfxSprite(ctx, "vfxDash", effect, effect.radius, {
+          alpha: alpha * 0.78,
+          offset: -54,
+          scale: 0.82 + (1 - alpha) * 0.18,
+        });
+      } else if (effect.type === "slashSprite") {
+        const progress = 1 - alpha;
+        this.drawVfxSprite(ctx, "vfxSlash", effect, effect.radius, {
+          alpha: Math.sin(Math.min(1, progress * 1.35) * Math.PI) * 0.84,
+          scale: 0.72 + progress * 0.42,
+          flipY: effect.flipY,
+        });
+      } else if (effect.type === "bossBurst") {
+        const progress = 1 - alpha;
+        this.drawVfxSprite(ctx, "vfxBoss", effect, effect.radius, {
+          alpha: Math.min(1, alpha * 1.7) * 0.9,
+          scale: 0.38 + progress * 0.9,
+          rotation: progress * 0.22,
+        });
+      } else if (effect.type === "ring") {
         const progress = 1 - alpha;
         ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.radius * progress, 0, TAU); ctx.stroke();
       } else if (effect.type === "impact") {
         const progress = 1 - alpha;
+        if (this.drawVfxSprite(ctx, "vfxImpact", effect, effect.radius * (effect.heavy ? 3.35 : 2.8), {
+          alpha: alpha * 0.9,
+          scale: 0.62 + progress * 0.62,
+          rotation: effect.angle + progress * 0.18,
+        })) continue;
         ctx.save();
         ctx.translate(effect.x, effect.y);
         ctx.rotate(effect.angle);
@@ -1666,7 +1719,14 @@ export class Game {
         ctx.globalAlpha *= 0.55;
         ctx.beginPath(); ctx.arc(0, 0, effect.radius * progress, 0, TAU); ctx.stroke();
         ctx.restore();
-      } else if (["block", "enemySlash"].includes(effect.type)) {
+      } else if (effect.type === "block") {
+        if (this.drawVfxSprite(ctx, "vfxBlock", effect, 146, {
+          alpha: alpha * 0.88,
+          offset: 34,
+          scale: 0.72 + (1 - alpha) * 0.32,
+        })) continue;
+        ctx.beginPath(); ctx.arc(effect.x, effect.y, 55, effect.angle - 0.8, effect.angle + 0.8); ctx.stroke();
+      } else if (effect.type === "enemySlash") {
         ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.type === "block" ? 55 : effect.radius, effect.angle - 0.8, effect.angle + 0.8); ctx.stroke();
       } else if (effect.type === "muzzle") {
         ctx.save(); ctx.translate(effect.x, effect.y); ctx.rotate(effect.angle); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(24, -7); ctx.lineTo(24, 7); ctx.closePath(); ctx.fill(); ctx.restore();
@@ -1674,6 +1734,23 @@ export class Game {
     }
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
+  }
+
+  drawVfxSprite(ctx, imageKey, effect, width, { alpha = 1, offset = 0, scale = 1, rotation = effect.angle, flipY = false } = {}) {
+    const image = this.images[imageKey];
+    if (!image?.complete || !image.naturalWidth) return false;
+    const drawWidth = width * scale;
+    const drawHeight = drawWidth * image.naturalHeight / image.naturalWidth;
+    ctx.save();
+    ctx.translate(effect.x + Math.cos(effect.angle) * offset, effect.y + Math.sin(effect.angle) * offset);
+    ctx.rotate(rotation);
+    ctx.scale(1, flipY ? -1 : 1);
+    ctx.globalAlpha = this.settings.reduceFlash ? alpha * 0.68 : alpha;
+    ctx.globalCompositeOperation = "lighter";
+    ctx.shadowBlur = 0;
+    ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    ctx.restore();
+    return true;
   }
 
   renderDamageTexts(ctx) {
