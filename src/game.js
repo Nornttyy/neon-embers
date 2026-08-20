@@ -1,10 +1,43 @@
-import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=2933f99a7b8a";
-import { audio } from "./audio.js?v=2933f99a7b8a";
-import { assetUrl } from "./revision.js?v=2933f99a7b8a";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=7f476bf7a61b";
+import { audio } from "./audio.js?v=7f476bf7a61b";
+import { assetUrl } from "./revision.js?v=7f476bf7a61b";
 
 const TAU = Math.PI * 2;
 const MAX_ASSET_LOAD_ATTEMPTS = 3;
 const ASSET_RETRY_DELAY = 140;
+const VFX_WARM_COLUMNS = 7;
+const VFX_WARM_ROWS = 4;
+const VFX_WARM_CELL_SIZE = 96;
+const VFX_IMAGE_KEYS = Object.freeze([
+  "guardField",
+  "parryFlash",
+  "guardBreak",
+  "pulseWave",
+  "overdriveAura",
+  "barrierShell",
+  "railRound",
+  "enemyBolt",
+  "bossBolt",
+  "railMuzzle",
+  "enemyMuzzle",
+  "enemySwing",
+  "attackTelegraph",
+  "heavyTelegraph",
+  "lancerTrail",
+  "enemySpawn",
+  "bladeHit",
+  "twinHit",
+  "hammerHit",
+  "railHit",
+  "guardHit",
+  "barrierHit",
+  "enemyDestroy",
+  "pickupCollect",
+  "enemyShield",
+  "dashStreak",
+  "bossBurst",
+  "energySpark",
+]);
 const PLAYER_SPRITES = Object.freeze({
   hunter: "playerHunter",
   storm: "playerStorm",
@@ -221,8 +254,11 @@ export class Game {
       pylon: "assets/world/arena-pylon.png",
     });
     this.assetLoadState.total = assetEntries.length;
+    this.vfxWarmState = { ready: false, warmed: 0, total: VFX_IMAGE_KEYS.length, failed: [] };
     this.assetsReady = Promise.all(assetEntries.map(([id, path]) => this.loadImageAsset(id, path)))
-      .then(() => {
+      .then(async () => {
+        await this.warmVfxImages();
+        this.vfxWarmState.ready = true;
         this.assetLoadState.ready = true;
         return this.assetLoadState;
       });
@@ -269,6 +305,99 @@ export class Game {
       });
       request();
     });
+  }
+
+  waitForAnimationFrames(count = 1) {
+    return new Promise((resolve) => {
+      let remaining = Math.max(1, count);
+      const next = () => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          resolve();
+          return;
+        }
+        if (typeof requestAnimationFrame === "function") requestAnimationFrame(next);
+        else window.setTimeout(next, 16);
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(next);
+      else window.setTimeout(next, 16);
+    });
+  }
+
+  markVfxWarmFailure(key) {
+    if (!this.vfxWarmState.failed.includes(key)) this.vfxWarmState.failed.push(key);
+  }
+
+  runVfxWarmPass(composite, warmedKeys) {
+    return new Promise((resolve) => {
+      const drawGrid = () => {
+        const context = this.ctx;
+        if (!context) {
+          for (const key of VFX_IMAGE_KEYS) this.markVfxWarmFailure(key);
+          resolve();
+          return;
+        }
+        let saved = false;
+        try {
+          context.save();
+          saved = true;
+          if (typeof context.resetTransform === "function") context.resetTransform();
+          else context.setTransform(1, 0, 0, 1, 0, 0);
+          context.globalAlpha = 0.25;
+          context.globalCompositeOperation = composite;
+          context.shadowBlur = 0;
+          context.filter = "none";
+          const cellSize = Math.max(1, Math.min(
+            VFX_WARM_CELL_SIZE,
+            Math.floor((this.canvas.width - 2) / VFX_WARM_COLUMNS),
+            Math.floor((this.canvas.height - 2) / VFX_WARM_ROWS),
+          ));
+          const innerSize = Math.max(1, cellSize - 4);
+          for (let index = 0; index < VFX_IMAGE_KEYS.length; index += 1) {
+            const key = VFX_IMAGE_KEYS[index];
+            const image = this.images[key];
+            if (!image?.complete || !image.naturalWidth || !image.naturalHeight) {
+              this.markVfxWarmFailure(key);
+              continue;
+            }
+            try {
+              const scale = Math.min(innerSize / image.naturalWidth, innerSize / image.naturalHeight);
+              const width = Math.max(1, image.naturalWidth * scale);
+              const height = Math.max(1, image.naturalHeight * scale);
+              const column = index % VFX_WARM_COLUMNS;
+              const row = Math.floor(index / VFX_WARM_COLUMNS);
+              const x = 1 + column * cellSize + (cellSize - width) / 2;
+              const y = 1 + row * cellSize + (cellSize - height) / 2;
+              context.drawImage(image, x, y, width, height);
+              warmedKeys.add(key);
+            } catch {
+              this.markVfxWarmFailure(key);
+            }
+          }
+        } catch {
+          // Main-canvas prewarm is optional; normal Image drawing remains the fallback.
+          for (const key of VFX_IMAGE_KEYS) this.markVfxWarmFailure(key);
+        } finally {
+          if (saved) {
+            try { context.restore(); } catch {
+              // The next normal render resets the main transform and drawing state.
+            }
+          }
+          resolve();
+        }
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(drawGrid);
+      else window.setTimeout(drawGrid, 16);
+    });
+  }
+
+  async warmVfxImages() {
+    const warmedKeys = new Set();
+    await this.runVfxWarmPass("source-over", warmedKeys);
+    await this.waitForAnimationFrames(3);
+    await this.runVfxWarmPass("lighter", warmedKeys);
+    await this.waitForAnimationFrames(3);
+    this.vfxWarmState.warmed = warmedKeys.size;
   }
 
   bindInput() {
@@ -504,7 +633,6 @@ export class Game {
     this.particles = [];
     this.effects = [];
     this.damageTexts = [];
-    this.weaponTrails = { primary: [], offhand: [] };
     this.decorations = Array.from({ length: 100 }, (_, index) => ({
       x: (index * 347.71) % GAME.width,
       y: (index * 613.37) % GAME.height,
@@ -644,7 +772,6 @@ export class Game {
     this.flash = Math.max(0, this.flash - dt * 4.5);
     this.shake = Math.max(0, this.shake - dt * 20);
     this.updatePlayer(dt);
-    this.updateWeaponTrails(dt);
     this.updateSpawning(dt);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
@@ -1322,23 +1449,6 @@ export class Game {
     audio.pickup();
   }
 
-  updateWeaponTrails(dt) {
-    if (!this.weaponTrails) return;
-    for (const hand of ["primary", "offhand"]) {
-      for (const point of this.weaponTrails[hand]) point.life -= dt;
-      this.weaponTrails[hand] = this.weaponTrails[hand].filter((point) => point.life > 0);
-    }
-    if (this.player.action !== "attack") return;
-    const timing = this.getAttackTiming();
-    if (timing.stage === "anticipation" || (timing.stage === "recovery" && timing.progress > 0.28)) return;
-    const pose = this.getHeldWeaponPose(this.run.elapsed);
-    for (const shape of this.getActiveWeaponShapes(pose)) {
-      const trail = this.weaponTrails[shape.hand];
-      trail.push({ x: shape.end.x, y: shape.end.y, life: 0.17, maxLife: 0.17 });
-      if (trail.length > 11) trail.splice(0, trail.length - 11);
-    }
-  }
-
   updateEffects(dt) {
     for (const particle of this.particles) {
       particle.life -= dt;
@@ -1709,7 +1819,6 @@ export class Game {
       });
     }
     const weaponPose = this.getHeldWeaponPose(time);
-    this.drawWeaponTrails(ctx);
     this.drawHeldWeapon(ctx, weaponPose);
     if (player.rangedPoseTimer > 0) this.drawRangedPistol(ctx);
     this.drawPlayerBody(ctx, time);
@@ -1762,32 +1871,6 @@ export class Game {
     ctx.shadowColor = WEAPONS.rail.color;
     ctx.shadowBlur = 5;
     ctx.drawImage(image, -size * 0.34, -size * 0.5, size, size);
-    ctx.restore();
-  }
-
-  drawWeaponTrails(ctx) {
-    const weapon = WEAPONS[this.run.core.weapon];
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    for (const hand of ["primary", "offhand"]) {
-      const trail = this.weaponTrails?.[hand] || [];
-      if (trail.length < 2) continue;
-      for (let index = 1; index < trail.length; index += 1) {
-        const previous = trail[index - 1];
-        const current = trail[index];
-        const alpha = clamp(Math.min(previous.life / previous.maxLife, current.life / current.maxLife), 0, 1);
-        ctx.globalAlpha = alpha * 0.18;
-        ctx.strokeStyle = weapon.color;
-        ctx.lineWidth = weapon.id === "hammer" ? 24 : 17;
-        ctx.beginPath(); ctx.moveTo(previous.x, previous.y); ctx.lineTo(current.x, current.y); ctx.stroke();
-        ctx.globalAlpha = alpha * 0.72;
-        ctx.strokeStyle = "#eaffff";
-        ctx.lineWidth = weapon.id === "hammer" ? 4 : 3;
-        ctx.beginPath(); ctx.moveTo(previous.x, previous.y); ctx.lineTo(current.x, current.y); ctx.stroke();
-      }
-    }
     ctx.restore();
   }
 
@@ -1859,30 +1942,15 @@ export class Game {
     const weapon = WEAPONS[this.run.core.weapon];
     const image = this.images[weapon.id];
     if (!image?.complete || !image.naturalWidth || !weapon.render) return;
-    const isAttacking = this.player.action === "attack";
-    const combo = this.player.attackIndex;
     const primarySide = pose.offhandAngle == null ? 0 : 5;
-    if (isAttacking) {
-      const primaryActive = this.run.core.weapon !== "twin" || combo === 0 || combo === 2;
-      const offhandActive = pose.offhandAngle != null && (combo === 1 || combo === 2);
-      const primaryDirection = combo === 1 ? -1 : 1;
-      const offhandDirection = -1;
-      if (primaryActive) {
-        this.drawWeaponSprite(ctx, image, weapon, pose.angle - primaryDirection * 0.14, primarySide, 0.12);
-      }
-      if (offhandActive) {
-        this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle - offhandDirection * 0.14, -5, 0.12);
-      }
-    }
-    this.drawWeaponSprite(ctx, image, weapon, pose.angle, primarySide, 1);
-    if (pose.offhandAngle != null) this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle, -5, 1);
+    this.drawWeaponSprite(ctx, image, weapon, pose.angle, primarySide);
+    if (pose.offhandAngle != null) this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle, -5);
   }
 
-  drawWeaponSprite(ctx, image, weapon, angle, sideOffset, alpha) {
+  drawWeaponSprite(ctx, image, weapon, angle, sideOffset) {
     const { size, anchorX, anchorY, rotation } = weapon.render;
     ctx.save();
-    ctx.globalAlpha *= alpha;
-    ctx.globalCompositeOperation = alpha < 1 ? "lighter" : "source-over";
+    ctx.globalCompositeOperation = "source-over";
     ctx.translate(
       this.player.x + Math.cos(angle + Math.PI / 2) * sideOffset,
       this.player.y + Math.sin(angle + Math.PI / 2) * sideOffset,
@@ -1890,7 +1958,7 @@ export class Game {
     ctx.rotate(angle);
     ctx.rotate(rotation);
     ctx.shadowColor = weapon.color;
-    ctx.shadowBlur = alpha < 1 ? 0 : 3;
+    ctx.shadowBlur = 3;
     ctx.drawImage(image, -anchorX * size, -anchorY * size, size, size);
     ctx.restore();
   }

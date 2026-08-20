@@ -1,8 +1,8 @@
-import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=2933f99a7b8a";
-import { audio } from "./audio.js?v=2933f99a7b8a";
-import { adService } from "./ad-service.js?v=2933f99a7b8a";
-import { Game } from "./game.js?v=2933f99a7b8a";
-import { ASSET_REVISION, assetUrl } from "./revision.js?v=2933f99a7b8a";
+import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=7f476bf7a61b";
+import { audio } from "./audio.js?v=7f476bf7a61b";
+import { adService } from "./ad-service.js?v=7f476bf7a61b";
+import { Game } from "./game.js?v=7f476bf7a61b";
+import { ASSET_REVISION, assetUrl } from "./revision.js?v=7f476bf7a61b";
 
 const SAVE_KEY = "neon-embers-save-v1";
 const SW_REFRESH_KEY = "neon-embers-sw-refresh";
