@@ -1,6 +1,6 @@
-import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=7f476bf7a61b";
-import { audio } from "./audio.js?v=7f476bf7a61b";
-import { assetUrl } from "./revision.js?v=7f476bf7a61b";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=e5f35dc50966";
+import { audio } from "./audio.js?v=e5f35dc50966";
+import { assetUrl } from "./revision.js?v=e5f35dc50966";
 
 const TAU = Math.PI * 2;
 const MAX_ASSET_LOAD_ATTEMPTS = 3;
@@ -8,6 +8,23 @@ const ASSET_RETRY_DELAY = 140;
 const VFX_WARM_COLUMNS = 7;
 const VFX_WARM_ROWS = 4;
 const VFX_WARM_CELL_SIZE = 96;
+const ARENA_CACHE_PADDING = 160;
+const WEAPON_TIP_TRAIL_CAPACITY = 11;
+const WEAPON_TIP_TRAIL_SAMPLE_INTERVAL = 1 / 90;
+const WEAPON_TIP_TRAIL_LIFETIME = 0.17;
+const WEAPON_TIP_TRAIL_HANDS = Object.freeze(["primary", "offhand"]);
+const FILTERED_SPRITE_VARIANTS = Object.freeze({
+  enemyHit: Object.freeze({ filter: "brightness(2.1) saturate(.35)", imageKeys: Object.freeze([
+    "enemyMelee", "skitterDrone", "lancerDrone", "enemyRanged",
+    "enemyBrute", "enemySentinel", "enemyElite", "enemyBoss",
+  ]) }),
+  playerSkill: Object.freeze({ filter: "brightness(1.35) saturate(1.18)", imageKeys: Object.freeze([
+    "playerHunter", "playerStorm", "playerBastion",
+  ]) }),
+  playerDash: Object.freeze({ filter: "brightness(1.18)", imageKeys: Object.freeze([
+    "playerHunter", "playerStorm", "playerBastion",
+  ]) }),
+});
 const VFX_IMAGE_KEYS = Object.freeze([
   "guardField",
   "parryFlash",
@@ -165,6 +182,16 @@ function normalized(x, y) {
   return length > 0.0001 ? { x: x / length, y: y / length } : { x: 0, y: 0 };
 }
 
+function createWeaponTipTrail() {
+  return {
+    points: Array.from({ length: WEAPON_TIP_TRAIL_CAPACITY }, () => ({ x: 0, y: 0, age: Infinity, stroke: 0 })),
+    start: 0,
+    count: 0,
+    stroke: 0,
+    sampleTimer: WEAPON_TIP_TRAIL_SAMPLE_INTERVAL,
+  };
+}
+
 function pointSegmentDistanceSquared(point, start, end) {
   const segmentX = end.x - start.x;
   const segmentY = end.y - start.y;
@@ -197,7 +224,9 @@ export class Game {
       x: Math.random(), y: Math.random(), size: randomBetween(0.5, 2.1), phase: Math.random() * TAU,
     }));
     this.images = {};
-    this.patterns = {};
+    this.filteredSprites = { enemyHit: {}, playerSkill: {}, playerDash: {} };
+    this.patterns = new WeakMap();
+    this.arenaCache = { canvas: null, key: "", pendingKey: "", ready: false, promise: null, generation: 0 };
     this.assetLoadState = { ready: false, loaded: 0, failed: [] };
     const assetEntries = Object.entries({
       guardField: "assets/effects/guard-field.png",
@@ -255,11 +284,16 @@ export class Game {
     });
     this.assetLoadState.total = assetEntries.length;
     this.vfxWarmState = { ready: false, warmed: 0, total: VFX_IMAGE_KEYS.length, failed: [] };
+    this.filteredSpriteState = { ready: false, prepared: 0, total: 0, failed: [] };
+    this.emitLoadProgress("images");
     this.assetsReady = Promise.all(assetEntries.map(([id, path]) => this.loadImageAsset(id, path)))
       .then(async () => {
+        await this.prepareFilteredSprites();
+        await this.warmFilteredSprites();
         await this.warmVfxImages();
         this.vfxWarmState.ready = true;
         this.assetLoadState.ready = true;
+        this.emitLoadProgress("ready");
         return this.assetLoadState;
       });
     this.resize();
@@ -281,6 +315,7 @@ export class Game {
         settled = true;
         if (loaded) this.assetLoadState.loaded += 1;
         else this.assetLoadState.failed.push(id);
+        this.emitLoadProgress("images");
         resolve({ id, loaded });
       };
       const request = () => {
@@ -307,6 +342,21 @@ export class Game {
     });
   }
 
+  emitLoadProgress(phase, phaseLoaded = null, phaseTotal = null) {
+    try {
+      this.callbacks.onLoadProgress?.({
+        phase,
+        loaded: this.assetLoadState.loaded,
+        total: this.assetLoadState.total,
+        failed: [...this.assetLoadState.failed],
+        phaseLoaded,
+        phaseTotal,
+      });
+    } catch {
+      // Loading must continue even if an optional presentation callback fails.
+    }
+  }
+
   waitForAnimationFrames(count = 1) {
     return new Promise((resolve) => {
       let remaining = Math.max(1, count);
@@ -326,6 +376,116 @@ export class Game {
 
   markVfxWarmFailure(key) {
     if (!this.vfxWarmState.failed.includes(key)) this.vfxWarmState.failed.push(key);
+  }
+
+  async prepareFilteredSprites() {
+    const jobs = Object.entries(FILTERED_SPRITE_VARIANTS)
+      .flatMap(([variant, definition]) => definition.imageKeys.map((imageKey) => ({
+        variant,
+        imageKey,
+        filter: definition.filter,
+      })));
+    this.filteredSpriteState.total = jobs.length;
+    this.emitLoadProgress("sprite-filters", 0, jobs.length);
+    for (let index = 0; index < jobs.length; index += 1) {
+      const { variant, imageKey, filter } = jobs[index];
+      const image = this.images[imageKey];
+      let filtered = null;
+      try {
+        if (image?.complete && image.naturalWidth && image.naturalHeight) {
+          const surface = document.createElement("canvas");
+          surface.width = image.naturalWidth;
+          surface.height = image.naturalHeight;
+          const context = surface.getContext("2d");
+          if (context) {
+            context.filter = filter;
+            context.drawImage(image, 0, 0);
+            context.filter = "none";
+            filtered = surface;
+            if (typeof createImageBitmap === "function") {
+              try { filtered = await createImageBitmap(surface); } catch {
+                // The rendered canvas remains an exact visual fallback.
+              }
+            }
+          }
+        }
+      } catch {
+        filtered = null;
+      }
+      if (filtered) {
+        this.filteredSprites[variant][imageKey] = filtered;
+        this.filteredSpriteState.prepared += 1;
+      } else {
+        this.filteredSpriteState.failed.push(`${variant}:${imageKey}`);
+      }
+      this.emitLoadProgress("sprite-filters", index + 1, jobs.length);
+      if ((index + 1) % 3 === 0) await this.waitForAnimationFrames(1);
+    }
+  }
+
+  runFilteredSpriteWarmPass() {
+    return new Promise((resolve) => {
+      const drawGrid = () => {
+        const context = this.ctx;
+        if (!context) {
+          resolve();
+          return;
+        }
+        const sprites = Object.values(this.filteredSprites).flatMap((group) => Object.values(group));
+        let saved = false;
+        try {
+          context.save();
+          saved = true;
+          if (typeof context.resetTransform === "function") context.resetTransform();
+          else context.setTransform(1, 0, 0, 1, 0, 0);
+          context.globalAlpha = 0.25;
+          context.globalCompositeOperation = "source-over";
+          context.shadowBlur = 0;
+          context.filter = "none";
+          const columns = 4;
+          const rows = Math.max(1, Math.ceil(sprites.length / columns));
+          const cellSize = Math.max(1, Math.min(
+            112,
+            Math.floor((this.canvas.width - 2) / columns),
+            Math.floor((this.canvas.height - 2) / rows),
+          ));
+          const innerSize = Math.max(1, cellSize - 4);
+          for (let index = 0; index < sprites.length; index += 1) {
+            const sprite = sprites[index];
+            const sourceWidth = sprite.naturalWidth || sprite.width;
+            const sourceHeight = sprite.naturalHeight || sprite.height;
+            if (!sourceWidth || !sourceHeight) continue;
+            const scale = Math.min(innerSize / sourceWidth, innerSize / sourceHeight);
+            const width = Math.max(1, sourceWidth * scale);
+            const height = Math.max(1, sourceHeight * scale);
+            const column = index % columns;
+            const row = Math.floor(index / columns);
+            const x = 1 + column * cellSize + (cellSize - width) / 2;
+            const y = 1 + row * cellSize + (cellSize - height) / 2;
+            context.drawImage(sprite, x, y, width, height);
+          }
+        } catch {
+          // Runtime rendering can still use the original sprites if warmup fails.
+        } finally {
+          if (saved) {
+            try { context.restore(); } catch {
+              // The normal frame resets the transform and drawing state.
+            }
+          }
+          resolve();
+        }
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(drawGrid);
+      else window.setTimeout(drawGrid, 16);
+    });
+  }
+
+  async warmFilteredSprites() {
+    this.emitLoadProgress("sprite-warm", 0, 1);
+    await this.runFilteredSpriteWarmPass();
+    await this.waitForAnimationFrames(3);
+    this.filteredSpriteState.ready = true;
+    this.emitLoadProgress("sprite-warm", 1, 1);
   }
 
   runVfxWarmPass(composite, warmedKeys) {
@@ -374,6 +534,19 @@ export class Game {
               this.markVfxWarmFailure(key);
             }
           }
+          if (composite === "screen") {
+            const pulse = this.images.pulseWave;
+            if (pulse?.complete && pulse.naturalWidth && pulse.naturalHeight) {
+              const targetWidth = Math.max(1, Math.min(
+                this.canvas.width - 2,
+                this.canvas.height * pulse.naturalWidth / pulse.naturalHeight - 2,
+                Math.ceil(540 * this.view.dpr),
+              ));
+              const targetHeight = targetWidth * pulse.naturalHeight / pulse.naturalWidth;
+              context.drawImage(pulse, 1, 1, targetWidth, targetHeight);
+              warmedKeys.add("pulseWave");
+            }
+          }
         } catch {
           // Main-canvas prewarm is optional; normal Image drawing remains the fallback.
           for (const key of VFX_IMAGE_KEYS) this.markVfxWarmFailure(key);
@@ -393,9 +566,17 @@ export class Game {
 
   async warmVfxImages() {
     const warmedKeys = new Set();
+    this.emitLoadProgress("vfx-source");
     await this.runVfxWarmPass("source-over", warmedKeys);
+    this.emitLoadProgress("vfx-source");
     await this.waitForAnimationFrames(3);
+    this.emitLoadProgress("vfx-lighter");
     await this.runVfxWarmPass("lighter", warmedKeys);
+    this.emitLoadProgress("vfx-lighter");
+    await this.waitForAnimationFrames(3);
+    this.emitLoadProgress("vfx-screen");
+    await this.runVfxWarmPass("screen", warmedKeys);
+    this.emitLoadProgress("vfx-screen");
     await this.waitForAnimationFrames(3);
     this.vfxWarmState.warmed = warmedKeys.size;
   }
@@ -450,6 +631,10 @@ export class Game {
     this.canvas.style.width = `${this.view.width}px`;
     this.canvas.style.height = `${this.view.height}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (this.run && this.arenaCache) {
+      this.invalidateArenaCache();
+      this.arenaReady = this.prepareArenaCache();
+    }
   }
 
   applySettings(settings) {
@@ -632,6 +817,10 @@ export class Game {
     this.pickups = [];
     this.particles = [];
     this.effects = [];
+    this.weaponTipTrails = {
+      primary: createWeaponTipTrail(),
+      offhand: createWeaponTipTrail(),
+    };
     this.damageTexts = [];
     this.decorations = Array.from({ length: 100 }, (_, index) => ({
       x: (index * 347.71) % GAME.width,
@@ -645,6 +834,7 @@ export class Game {
     this.shake = 0;
     this.flash = 0;
     this.state = "room";
+    this.arenaReady = this.prepareArenaCache();
     audio.pauseMusic();
     this.callbacks.onState?.("room");
     this.emitHud(true);
@@ -721,6 +911,7 @@ export class Game {
     this.run.stageDefeated = 0;
     this.run.mission = stage.id;
     this.state = "playing";
+    if (!this.isArenaCacheReady("stage", stageIndex)) this.arenaReady = this.prepareArenaCache({ mode: "stage", stageIndex });
     this.run.spawnTimer = 0.45;
     audio.resumeMusic();
     this.callbacks.onState?.("playing");
@@ -772,6 +963,7 @@ export class Game {
     this.flash = Math.max(0, this.flash - dt * 4.5);
     this.shake = Math.max(0, this.shake - dt * 20);
     this.updatePlayer(dt);
+    this.updateWeaponTipTrails(dt);
     this.updateSpawning(dt);
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
@@ -931,6 +1123,7 @@ export class Game {
     player.attackDuration = combo[index].duration / (player.stats.attackSpeed * overdrive);
     player.attackHit = new Set();
     player.comboQueued = false;
+    this.beginWeaponTipTrailStroke(index);
     if (combo[index].lunge) {
       player.x = clamp(player.x + Math.cos(player.facing) * combo[index].lunge, 42, GAME.width - 42);
       player.y = clamp(player.y + Math.sin(player.facing) * combo[index].lunge, 42, GAME.height - 42);
@@ -1012,6 +1205,63 @@ export class Game {
     return shapes;
   }
 
+  beginWeaponTipTrailStroke(attackIndex) {
+    const trails = this.weaponTipTrails;
+    if (!trails) return;
+    const begin = (trail) => {
+      trail.stroke += 1;
+      trail.sampleTimer = WEAPON_TIP_TRAIL_SAMPLE_INTERVAL;
+    };
+    if (this.run.core.weapon !== "twin" || attackIndex !== 1) begin(trails.primary);
+    if (this.run.core.weapon === "twin" && attackIndex !== 0) begin(trails.offhand);
+  }
+
+  updateWeaponTipTrails(dt) {
+    const trails = this.weaponTipTrails;
+    if (!trails) return;
+    const lifetime = WEAPON_TIP_TRAIL_LIFETIME;
+    for (const hand of WEAPON_TIP_TRAIL_HANDS) {
+      const trail = trails[hand];
+      trail.sampleTimer += dt;
+      for (let offset = 0; offset < trail.count; offset += 1) {
+        trail.points[(trail.start + offset) % WEAPON_TIP_TRAIL_CAPACITY].age += dt;
+      }
+      while (trail.count > 0 && trail.points[trail.start].age >= lifetime) {
+        trail.start = (trail.start + 1) % WEAPON_TIP_TRAIL_CAPACITY;
+        trail.count -= 1;
+      }
+    }
+    if (this.player.action !== "attack") return;
+    const timing = this.getAttackTiming();
+    if (timing.stage !== "strike" && !(timing.stage === "recovery" && timing.progress <= 0.28)) return;
+    const shapes = this.getActiveWeaponShapes(this.getHeldWeaponPose(this.run.elapsed));
+    for (const shape of shapes) this.sampleWeaponTipTrail(trails[shape.hand], shape.end);
+  }
+
+  sampleWeaponTipTrail(trail, tip) {
+    if (!trail) return;
+    let latest = null;
+    if (trail.count > 0) {
+      latest = trail.points[(trail.start + trail.count - 1) % WEAPON_TIP_TRAIL_CAPACITY];
+    }
+    const beginsStroke = !latest || latest.stroke !== trail.stroke;
+    if (!beginsStroke && trail.sampleTimer < WEAPON_TIP_TRAIL_SAMPLE_INTERVAL) return;
+    let writeIndex;
+    if (trail.count < WEAPON_TIP_TRAIL_CAPACITY) {
+      writeIndex = (trail.start + trail.count) % WEAPON_TIP_TRAIL_CAPACITY;
+      trail.count += 1;
+    } else {
+      writeIndex = trail.start;
+      trail.start = (trail.start + 1) % WEAPON_TIP_TRAIL_CAPACITY;
+    }
+    const point = trail.points[writeIndex];
+    point.x = tip.x;
+    point.y = tip.y;
+    point.age = 0;
+    point.stroke = trail.stroke;
+    trail.sampleTimer = 0;
+  }
+
   startReload() {
     if (!this.player || this.player.reloadTimer > 0 || this.player.ammo >= this.player.maxAmmo) return;
     this.player.reloadTimer = 1.28 * this.player.stats.reload;
@@ -1067,6 +1317,7 @@ export class Game {
     this.camera.x = this.player.x;
     this.camera.y = this.player.y;
     this.state = "room";
+    this.arenaReady = this.prepareArenaCache({ mode: "room", stageIndex: nextIndex });
     audio.pauseMusic();
     audio.levelUp();
     this.callbacks.onState?.("room");
@@ -1612,16 +1863,154 @@ export class Game {
     }
   }
 
+  getArenaCacheKey(mode = this.state === "room" ? "room" : "stage", stageIndex = this.run?.stageIndex || 0) {
+    return `${mode}:${mode === "room" ? "room" : stageIndex}:dpr-${this.view.dpr}`;
+  }
+
+  isArenaCacheReady(mode = this.state === "room" ? "room" : "stage", stageIndex = this.run?.stageIndex || 0) {
+    return Boolean(this.arenaCache?.ready && this.arenaCache.key === this.getArenaCacheKey(mode, stageIndex));
+  }
+
+  invalidateArenaCache() {
+    if (!this.arenaCache) return;
+    this.arenaCache.generation += 1;
+    this.arenaCache.ready = false;
+    this.arenaCache.key = "";
+    this.arenaCache.pendingKey = "";
+    this.arenaCache.promise = null;
+    if (this.arenaCache.canvas) {
+      this.arenaCache.canvas.width = 1;
+      this.arenaCache.canvas.height = 1;
+      this.arenaCache.canvas = null;
+    }
+  }
+
+  runArenaCacheWarmPass(canvas) {
+    return new Promise((resolve) => {
+      const submit = () => {
+        const context = this.ctx;
+        let saved = false;
+        try {
+          context.save();
+          saved = true;
+          if (typeof context.resetTransform === "function") context.resetTransform();
+          else context.setTransform(1, 0, 0, 1, 0, 0);
+          context.globalAlpha = 0.25;
+          context.globalCompositeOperation = "source-over";
+          context.filter = "none";
+          context.shadowBlur = 0;
+          const scale = Math.min(this.canvas.width / canvas.width, this.canvas.height / canvas.height);
+          const width = Math.max(1, canvas.width * scale);
+          const height = Math.max(1, canvas.height * scale);
+          context.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, width, height);
+        } catch {
+          // The cached arena remains usable even if the hidden upload pass fails.
+        } finally {
+          if (saved) {
+            try { context.restore(); } catch {
+              // The next normal frame resets the transform and drawing state.
+            }
+          }
+          resolve();
+        }
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(submit);
+      else window.setTimeout(submit, 16);
+    });
+  }
+
+  prepareArenaCache({
+    mode = this.state === "room" ? "room" : "stage",
+    stageIndex = this.state === "room" ? this.run?.pendingStageIndex || 0 : this.run?.stageIndex || 0,
+  } = {}) {
+    if (!this.run || !this.decorations) return Promise.resolve(false);
+    const key = this.getArenaCacheKey(mode, stageIndex);
+    if (this.arenaCache.ready && this.arenaCache.key === key) return Promise.resolve(true);
+    if (this.arenaCache.pendingKey === key && this.arenaCache.promise) return this.arenaCache.promise;
+    const generation = this.arenaCache.generation + 1;
+    this.arenaCache.generation = generation;
+    this.arenaCache.pendingKey = key;
+    this.emitLoadProgress("arena-cache", 0, 1);
+    const promise = new Promise((resolve) => {
+      const build = async () => {
+        let nextCanvas = null;
+        try {
+          nextCanvas = document.createElement("canvas");
+          nextCanvas.width = Math.max(1, Math.round((GAME.width + ARENA_CACHE_PADDING * 2) * this.view.dpr));
+          nextCanvas.height = Math.max(1, Math.round((GAME.height + ARENA_CACHE_PADDING * 2) * this.view.dpr));
+          const context = nextCanvas.getContext("2d", { alpha: true });
+          if (!context) throw new Error("Arena cache context unavailable");
+          context.setTransform(this.view.dpr, 0, 0, this.view.dpr, 0, 0);
+          context.translate(ARENA_CACHE_PADDING, ARENA_CACHE_PADDING);
+          this.drawArenaStatic(context, { mode, stageIndex });
+          if (generation !== this.arenaCache.generation) {
+            nextCanvas.width = 1;
+            nextCanvas.height = 1;
+            resolve(false);
+            return;
+          }
+          const previousCanvas = this.arenaCache.canvas;
+          this.arenaCache.canvas = nextCanvas;
+          this.arenaCache.key = key;
+          this.arenaCache.pendingKey = "";
+          this.arenaCache.ready = true;
+          if (previousCanvas && previousCanvas !== nextCanvas) {
+            previousCanvas.width = 1;
+            previousCanvas.height = 1;
+          }
+          await this.runArenaCacheWarmPass(nextCanvas);
+          await this.waitForAnimationFrames(3);
+          if (generation === this.arenaCache.generation) {
+            this.arenaCache.promise = null;
+            this.emitLoadProgress("arena-cache", 1, 1);
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        } catch {
+          if (nextCanvas && nextCanvas !== this.arenaCache.canvas) {
+            nextCanvas.width = 1;
+            nextCanvas.height = 1;
+          }
+          if (generation === this.arenaCache.generation) {
+            this.arenaCache.pendingKey = "";
+            this.arenaCache.promise = null;
+          }
+          resolve(false);
+        }
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(build);
+      else window.setTimeout(build, 16);
+    });
+    this.arenaCache.promise = promise;
+    return promise;
+  }
+
   renderArena(ctx) {
+    const mode = this.state === "room" ? "room" : "stage";
+    const stageIndex = mode === "room" ? this.run?.pendingStageIndex || 0 : this.run?.stageIndex || 0;
+    if (this.isArenaCacheReady(mode, stageIndex) && this.arenaCache.canvas) {
+      ctx.drawImage(
+        this.arenaCache.canvas,
+        0, 0, this.arenaCache.canvas.width, this.arenaCache.canvas.height,
+        -ARENA_CACHE_PADDING, -ARENA_CACHE_PADDING,
+        GAME.width + ARENA_CACHE_PADDING * 2, GAME.height + ARENA_CACHE_PADDING * 2,
+      );
+      return;
+    }
+    this.drawArenaStatic(ctx, { mode, stageIndex });
+  }
+
+  drawArenaStatic(ctx, { mode = "room", stageIndex = 0 } = {}) {
     const palettes = [
       { ground: "#060b16", grid: "rgba(76,181,220,.08)", border: "rgba(77,246,255,.34)" },
       { ground: "#0b0815", grid: "rgba(183,125,255,.09)", border: "rgba(183,125,255,.38)" },
       { ground: "#13070e", grid: "rgba(255,70,110,.09)", border: "rgba(255,70,110,.44)" },
     ];
-    const palette = this.state === "room" ? palettes[0] : palettes[this.run?.stageIndex || 0] || palettes[0];
-    const floorKey = this.state === "room"
+    const palette = mode === "room" ? palettes[0] : palettes[stageIndex] || palettes[0];
+    const floorKey = mode === "room"
       ? "floorRoom"
-      : ["floorOuter", "floorBlockade", "floorCore"][this.run?.stageIndex || 0] || "floorOuter";
+      : ["floorOuter", "floorBlockade", "floorCore"][stageIndex] || "floorOuter";
     const floorPattern = this.getFloorPattern(ctx, floorKey);
     ctx.fillStyle = floorPattern || palette.ground;
     ctx.fillRect(0, 0, GAME.width, GAME.height);
@@ -1633,7 +2022,7 @@ export class Game {
         this.drawWorldProp(ctx, "arenaVent", decoration.x, decoration.y, 44 + decoration.size * 2, angle, palette.grid);
       }
     }
-    if (this.state === "room") {
+    if (mode === "room") {
       this.drawWorldProp(ctx, "terminal", GAME.width / 2 + 165, GAME.height / 2 - 10, 156, -0.18, "#4df6ff");
     }
     this.renderArenaBoundary(ctx, palette.border);
@@ -1642,8 +2031,13 @@ export class Game {
   getFloorPattern(ctx, imageKey) {
     const image = this.images[imageKey];
     if (!image?.complete || !image.naturalWidth || typeof ctx.createPattern !== "function") return null;
-    if (!this.patterns[imageKey]) this.patterns[imageKey] = ctx.createPattern(image, "repeat");
-    return this.patterns[imageKey];
+    let contextPatterns = this.patterns.get(ctx);
+    if (!contextPatterns) {
+      contextPatterns = new Map();
+      this.patterns.set(ctx, contextPatterns);
+    }
+    if (!contextPatterns.has(imageKey)) contextPatterns.set(imageKey, ctx.createPattern(image, "repeat"));
+    return contextPatterns.get(imageKey);
   }
 
   drawWorldProp(ctx, imageKey, x, y, width, angle = 0, glow = "#4df6ff") {
@@ -1754,9 +2148,10 @@ export class Game {
     if (sprite?.complete && sprite.naturalWidth) {
       const width = enemy.radius * (ENEMY_SPRITE_SCALE[enemy.id] || 2.9);
       const height = width * sprite.naturalHeight / sprite.naturalWidth;
-      if (enemy.hitFlash > 0) ctx.filter = "brightness(2.1) saturate(.35)";
-      ctx.drawImage(sprite, -width / 2, -height / 2, width, height);
-      ctx.filter = "none";
+      const renderedSprite = enemy.hitFlash > 0
+        ? this.filteredSprites.enemyHit[ENEMY_SPRITES[enemy.id]] || sprite
+        : sprite;
+      ctx.drawImage(renderedSprite, -width / 2, -height / 2, width, height);
     } else {
       ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : "#12172a";
       ctx.strokeStyle = enemy.color;
@@ -1819,6 +2214,7 @@ export class Game {
       });
     }
     const weaponPose = this.getHeldWeaponPose(time);
+    this.drawWeaponTipTrails(ctx);
     this.drawHeldWeapon(ctx, weaponPose);
     if (player.rangedPoseTimer > 0) this.drawRangedPistol(ctx);
     this.drawPlayerBody(ctx, time);
@@ -1947,6 +2343,45 @@ export class Game {
     if (pose.offhandAngle != null) this.drawWeaponSprite(ctx, image, weapon, pose.offhandAngle, -5);
   }
 
+  drawWeaponTipTrails(ctx) {
+    const trails = this.weaponTipTrails;
+    if (!trails) return;
+    const weapon = WEAPONS[this.run.core.weapon];
+    const isHammer = weapon.id === "hammer";
+    const lifetime = WEAPON_TIP_TRAIL_LIFETIME;
+    const outerWidth = isHammer ? 24 : 17;
+    const coreWidth = isHammer ? 4 : 3;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const hand of WEAPON_TIP_TRAIL_HANDS) {
+      const trail = trails[hand];
+      for (let offset = 1; offset < trail.count; offset += 1) {
+        const previous = trail.points[(trail.start + offset - 1) % WEAPON_TIP_TRAIL_CAPACITY];
+        const current = trail.points[(trail.start + offset) % WEAPON_TIP_TRAIL_CAPACITY];
+        if (previous.stroke !== current.stroke) continue;
+        const freshness = 1 - clamp(Math.max(previous.age, current.age) / lifetime, 0, 1);
+        if (freshness <= 0) continue;
+        ctx.globalAlpha = freshness * (this.settings.reduceFlash ? 0.12 : 0.18);
+        ctx.strokeStyle = weapon.color;
+        ctx.lineWidth = outerWidth;
+        ctx.beginPath();
+        ctx.moveTo(previous.x, previous.y);
+        ctx.lineTo(current.x, current.y);
+        ctx.stroke();
+        ctx.globalAlpha = freshness * (this.settings.reduceFlash ? 0.46 : 0.72);
+        ctx.strokeStyle = "#f4ffff";
+        ctx.lineWidth = coreWidth;
+        ctx.beginPath();
+        ctx.moveTo(previous.x, previous.y);
+        ctx.lineTo(current.x, current.y);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   drawWeaponSprite(ctx, image, weapon, angle, sideOffset) {
     const { size, anchorX, anchorY, rotation } = weapon.render;
     ctx.save();
@@ -1973,18 +2408,21 @@ export class Game {
     }
     const width = player.radius * (PLAYER_SPRITE_SCALE[this.run.core.id] || 2.8);
     const height = width * image.naturalHeight / image.naturalWidth;
+    const renderedImage = player.action === "skill"
+      ? this.filteredSprites.playerSkill[key] || image
+      : player.action === "dash"
+        ? this.filteredSprites.playerDash[key] || image
+        : image;
     ctx.save();
     ctx.translate(player.x, player.y);
     ctx.rotate(player.facing);
     ctx.shadowColor = this.run.core.color;
     ctx.shadowBlur = player.action === "skill" ? 28 : player.action === "block" ? 20 : 14;
-    if (player.action === "skill") ctx.filter = "brightness(1.35) saturate(1.18)";
-    else if (player.action === "dash") ctx.filter = "brightness(1.18)";
-    ctx.drawImage(image, -width / 2, -height / 2, width, height);
+    ctx.drawImage(renderedImage, -width / 2, -height / 2, width, height);
     if (player.action === "skill") {
       ctx.globalAlpha = 0.2;
       ctx.globalCompositeOperation = "lighter";
-      ctx.drawImage(image, -width / 2, -height / 2, width, height);
+      ctx.drawImage(renderedImage, -width / 2, -height / 2, width, height);
     }
     ctx.restore();
   }

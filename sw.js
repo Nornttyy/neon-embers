@@ -1,6 +1,7 @@
 const CACHE_PREFIX = "neon-embers-";
-const ASSET_REVISION = "7f476bf7a61b";
+const ASSET_REVISION = "e5f35dc50966";
 const CACHE_VERSION = `${CACHE_PREFIX}${ASSET_REVISION}`;
+const PRECACHE_CONCURRENCY = 4;
 const versioned = (path) => `${path}?v=${ASSET_REVISION}`;
 
 const CORE_SHELL = [
@@ -95,19 +96,75 @@ const ASSET_SHELL = [
   versioned("./assets/audio/mechanism-2.ogg"),
 ];
 
-const freshRequest = (path) => new Request(new URL(path, self.registration.scope), { cache: "reload" });
+const precacheRequest = (path) => new Request(new URL(path, self.registration.scope), {
+  cache: path.includes(`?v=${ASSET_REVISION}`) ? "default" : "reload",
+});
+
+async function broadcastCacheProgress(progress) {
+  try {
+    const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of clients) {
+      try {
+        client.postMessage(progress);
+      } catch {
+        // A closing client must not interrupt installation.
+      }
+    }
+  } catch {
+    // Progress reporting is informational; caching remains authoritative.
+  }
+}
+
+async function cacheWithConcurrency(cache, paths, progress, reportProgress, required) {
+  let nextIndex = 0;
+  const failures = [];
+  const worker = async () => {
+    while (nextIndex < paths.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const path = paths[index];
+      try {
+        const request = precacheRequest(path);
+        const response = await fetch(request);
+        if (!response.ok) throw new Error(`Unable to precache ${path}`);
+        await cache.put(request, response);
+        progress.loaded += 1;
+      } catch (error) {
+        failures.push({ path, error });
+        progress.failed.push(path);
+      }
+      await reportProgress();
+    }
+  };
+  const workerCount = Math.min(PRECACHE_CONCURRENCY, paths.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  if (required && failures.length > 0) {
+    throw new Error(`Required precache failed: ${failures.map(({ path }) => path).join(", ")}`);
+  }
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
+    const progress = {
+      type: "CACHE_PROGRESS",
+      loaded: 0,
+      total: CORE_SHELL.length + ASSET_SHELL.length,
+      failed: [],
+      ready: false,
+    };
+    let reportQueue = Promise.resolve();
+    const reportProgress = () => {
+      const snapshot = { ...progress, failed: [...progress.failed] };
+      reportQueue = reportQueue.then(() => broadcastCacheProgress(snapshot));
+      return reportQueue;
+    };
+    await reportProgress();
     const cache = await caches.open(CACHE_VERSION);
-    await cache.addAll(CORE_SHELL.map(freshRequest));
-    await Promise.allSettled(ASSET_SHELL.map(async (path) => {
-      const request = freshRequest(path);
-      const response = await fetch(request);
-      if (!response.ok) throw new Error(`Unable to precache ${path}`);
-      await cache.put(request, response);
-    }));
+    await cacheWithConcurrency(cache, CORE_SHELL, progress, reportProgress, true);
+    await cacheWithConcurrency(cache, ASSET_SHELL, progress, reportProgress, false);
     await self.skipWaiting();
+    progress.ready = true;
+    await reportProgress();
   })());
 });
 

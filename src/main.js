@@ -1,8 +1,8 @@
-import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=7f476bf7a61b";
-import { audio } from "./audio.js?v=7f476bf7a61b";
-import { adService } from "./ad-service.js?v=7f476bf7a61b";
-import { Game } from "./game.js?v=7f476bf7a61b";
-import { ASSET_REVISION, assetUrl } from "./revision.js?v=7f476bf7a61b";
+import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=e5f35dc50966";
+import { audio } from "./audio.js?v=e5f35dc50966";
+import { adService } from "./ad-service.js?v=e5f35dc50966";
+import { Game } from "./game.js?v=e5f35dc50966";
+import { ASSET_REVISION, assetUrl } from "./revision.js?v=e5f35dc50966";
 
 const SAVE_KEY = "neon-embers-save-v1";
 const SW_REFRESH_KEY = "neon-embers-sw-refresh";
@@ -45,6 +45,10 @@ let currentScreen = "menu-screen";
 let settingsReturnScreen = "menu-screen";
 let resetArmedUntil = 0;
 let toastTimer = 0;
+let loadingForRun = false;
+let runtimeAssetsReady = false;
+let offlineCacheReady = Promise.resolve();
+const offlineCacheState = { loaded: 0, total: 0, failed: [], ready: false };
 
 const byId = (id) => document.getElementById(id);
 const allScreens = [...document.querySelectorAll(".screen")];
@@ -53,6 +57,11 @@ const touchControls = byId("touch-controls");
 const coarsePointer = window.matchMedia("(pointer: coarse)");
 
 const elements = {
+  loadingScreen: byId("loading-screen"),
+  loadingTrack: byId("loading-track"),
+  loadingFill: byId("loading-fill"),
+  loadingStage: byId("loading-stage"),
+  loadingPercent: byId("loading-percent"),
   menuScrap: byId("menu-scrap"),
   menuBestTime: byId("menu-best-time"),
   menuBestKills: byId("menu-best-kills"),
@@ -124,6 +133,67 @@ function showToast(message, duration = 1700) {
   elements.toast.textContent = message;
   elements.toast.classList.add("is-active");
   toastTimer = window.setTimeout(() => elements.toast.classList.remove("is-active"), duration);
+}
+
+function setLoadingStatus(stage, percent) {
+  const progress = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  elements.loadingStage.textContent = stage;
+  elements.loadingPercent.textContent = `${progress}%`;
+  elements.loadingFill.style.width = `${progress}%`;
+  elements.loadingTrack.setAttribute("aria-valuenow", String(progress));
+}
+
+function showLoadingScreen(stage = "读取战斗素材", percent = 0) {
+  setLoadingStatus(stage, percent);
+  elements.loadingScreen.setAttribute("aria-hidden", "false");
+  elements.loadingScreen.setAttribute("aria-busy", "true");
+  elements.loadingScreen.classList.add("is-active");
+}
+
+function hideLoadingScreen() {
+  setLoadingStatus("战斗核心就绪", 100);
+  elements.loadingScreen.setAttribute("aria-busy", "false");
+  elements.loadingScreen.setAttribute("aria-hidden", "true");
+  elements.loadingScreen.classList.remove("is-active");
+}
+
+function renderLoadProgress({
+  phase = "images", loaded = 0, total = 1, failed = [], phaseLoaded = 0, phaseTotal = 1,
+} = {}) {
+  const failedCount = Array.isArray(failed) ? failed.length : Number(failed) || 0;
+  const completed = Math.min(total, loaded + failedCount);
+  if (phase === "images") {
+    setLoadingStatus(`读取战斗素材 ${completed}/${total}`, total ? completed / total * 76 : 0);
+  } else if (phase === "sprite-filters") {
+    const prepared = Math.min(phaseTotal, phaseLoaded);
+    setLoadingStatus(`生成受击与动作材质 ${prepared}/${phaseTotal}`, 76 + (phaseTotal ? prepared / phaseTotal * 4 : 0));
+  } else if (phase === "sprite-warm") {
+    setLoadingStatus("提交角色材质", phaseLoaded >= phaseTotal ? 82 : 80);
+  } else if (phase === "vfx-source") {
+    setLoadingStatus("准备战斗特效", 85);
+  } else if (phase === "vfx-lighter") {
+    setLoadingStatus("准备能量光效", 91);
+  } else if (phase === "vfx-screen") {
+    setLoadingStatus("校准冲击光效", 96);
+  } else if (phase === "arena-cache") {
+    setLoadingStatus("构建完整战区", phaseLoaded >= phaseTotal ? 100 : 98);
+  } else if (phase === "ready") {
+    setLoadingStatus("战斗核心就绪", 100);
+  }
+}
+
+function renderOfflineCacheProgress({ loaded = 0, total = 0, failed = [], ready = false } = {}) {
+  offlineCacheState.loaded = Number(loaded) || 0;
+  offlineCacheState.total = Number(total) || 0;
+  offlineCacheState.failed = Array.isArray(failed) ? failed : [];
+  offlineCacheState.ready = Boolean(ready);
+  if (!runtimeAssetsReady || loadingForRun || !elements.loadingScreen.classList.contains("is-active")) return;
+  const completed = Math.min(offlineCacheState.total, offlineCacheState.loaded + offlineCacheState.failed.length);
+  const progress = offlineCacheState.total ? completed / offlineCacheState.total : 1;
+  setLoadingStatus(
+    ready ? "离线战斗缓存就绪" : `建立离线战斗缓存 ${completed}/${offlineCacheState.total}`,
+    ready ? 100 : 96 + progress * 3,
+  );
 }
 
 function renderProfile() {
@@ -281,6 +351,7 @@ function showResult(summary) {
 }
 
 const game = new Game(byId("game-canvas"), {
+  onLoadProgress: renderLoadProgress,
   onHud: renderHud,
   onRoom: renderRoom,
   onPauseChange: (paused) => {
@@ -291,13 +362,38 @@ const game = new Game(byId("game-canvas"), {
   onResult: showResult,
 });
 
+game.assetsReady.then(async () => {
+  runtimeAssetsReady = true;
+  if (!offlineCacheState.ready && offlineCacheState.total) renderOfflineCacheProgress(offlineCacheState);
+  await offlineCacheReady;
+  if (!loadingForRun) hideLoadingScreen();
+});
+
 async function beginRun(coreId) {
-  await game.assetsReady;
+  loadingForRun = true;
+  showLoadingScreen("同步战斗音频", 97);
+  audio.unlock();
+  await Promise.all([game.assetsReady, offlineCacheReady]);
+  await audio.loadSamples();
   profile.lastCore = coreId;
   profile.guideSeen = true;
   saveProfile();
   game.applySettings(profile.settings);
   game.start(coreId, profile.meta);
+  await game.arenaReady;
+  loadingForRun = false;
+  hideLoadingScreen();
+}
+
+async function beginPreparedStage() {
+  if (game.state !== "room") return;
+  loadingForRun = true;
+  showLoadingScreen("构建完整战区", 98);
+  const stageIndex = game.run.pendingStageIndex;
+  await game.prepareArenaCache({ mode: "stage", stageIndex });
+  if (game.beginStage()) showGameLayer();
+  loadingForRun = false;
+  hideLoadingScreen();
 }
 
 function returnToMenu() {
@@ -383,9 +479,7 @@ byId("reset-save-button").addEventListener("click", (event) => {
 });
 
 byId("pause-button").addEventListener("click", () => game.pause(true));
-byId("room-start-button").addEventListener("click", () => {
-  if (game.beginStage()) showGameLayer();
-});
+byId("room-start-button").addEventListener("click", () => { void beginPreparedStage(); });
 byId("room-exit-button").addEventListener("click", returnToMenu);
 byId("resume-button").addEventListener("click", () => game.resume());
 byId("restart-button").addEventListener("click", () => beginRun(profile.lastCore));
@@ -456,6 +550,9 @@ if (previewCore && CORES[previewCore]) {
 if ("serviceWorker" in navigator && (window.location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(window.location.hostname))) {
   const hadController = Boolean(navigator.serviceWorker.controller);
   let refreshingForUpdate = false;
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "CACHE_PROGRESS") renderOfflineCacheProgress(event.data);
+  });
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController || refreshingForUpdate) return;
     if (window.sessionStorage.getItem(SW_REFRESH_KEY) === ASSET_REVISION) return;
@@ -465,11 +562,30 @@ if ("serviceWorker" in navigator && (window.location.protocol === "https:" || ["
     updateUrl.searchParams.set("_sw", Date.now().toString(36));
     window.location.replace(updateUrl);
   });
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
-      .then((registration) => registration.update())
-      .catch(() => {
-        // Offline support is optional; a registration failure must never block the game.
-      });
-  });
+  const waitForInstall = (registration) => {
+    const worker = registration.installing;
+    if (!worker || ["installed", "activated", "redundant"].includes(worker.state)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const finish = () => {
+        if (!["installed", "activated", "redundant"].includes(worker.state)) return;
+        worker.removeEventListener("statechange", finish);
+        resolve();
+      };
+      worker.addEventListener("statechange", finish);
+    });
+  };
+  offlineCacheReady = navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" })
+    .then(async (registration) => {
+      try { await registration.update(); } catch {
+        // The worker already installing from register() can still complete normally.
+      }
+      await waitForInstall(registration);
+      offlineCacheState.ready = true;
+      return true;
+    })
+    .catch(() => {
+      // Offline support is optional; a registration failure must never block the game.
+      offlineCacheState.ready = true;
+      return false;
+    });
 }
