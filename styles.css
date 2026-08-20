@@ -402,9 +402,12 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
 .room-panel { width: min(920px, 100%); }
 .room-exit { margin-bottom: 18px; }
 .room-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; }
-.room-stage-line { display: flex; align-items: baseline; gap: 13px; }
-.room-stage-line span { color: var(--cyan); font-size: 20px; font-weight: 950; letter-spacing: .08em; }
-.room-stage-line h2 { margin-bottom: 2px; }
+.room-heading h2 { margin-bottom: 8px; }
+.room-next-stage { display: flex; align-items: baseline; gap: 10px; }
+.room-next-stage span { color: var(--cyan); font-size: 10px; font-weight: 850; letter-spacing: .12em; }
+.room-next-stage b { font-size: 14px; }
+.room-next-stage strong { font-size: 17px; }
+.room-next-stage small { color: var(--muted); font-size: 11px; }
 .room-energy { min-width: 130px; padding: 14px 18px; border: 1px solid rgba(77,246,255,.22); background: rgba(77,246,255,.07); text-align: right; }
 .room-energy span { display: block; color: var(--muted); font-size: 10px; letter-spacing: .12em; }
 .room-energy strong { color: var(--cyan); font-size: 30px; font-variant-numeric: tabular-nums; }
@@ -482,6 +485,8 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
   .room-heading { display: block; }
   .room-energy { display: flex; align-items: center; justify-content: space-between; width: 100%; min-width: 0; margin-top: 12px; padding: 9px 12px; text-align: left; }
   .room-energy strong { font-size: 24px; }
+  .room-next-stage { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; }
+  .room-next-stage small { grid-column: 1 / -1; }
   .room-status { grid-template-columns: repeat(2, 1fr); }
   .room-grid { grid-template-columns: 1fr; }
   .room-item { grid-template-columns: 42px minmax(0, 1fr) auto; min-height: 78px; padding: 11px; gap: 9px; }

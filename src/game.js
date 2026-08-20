@@ -271,9 +271,10 @@ export class Game {
       energyEarned: 0,
       purchases: {},
       stageIndex: 0,
-      stageQueue: [...MISSION_STAGES[0].enemies],
+      pendingStageIndex: 0,
+      stageQueue: [],
       stageDefeated: 0,
-      mission: MISSION_STAGES[0].id,
+      mission: "ROOM",
       bossSpawned: false,
       boss: null,
       victory: false,
@@ -353,7 +354,7 @@ export class Game {
 
   getRoomState() {
     if (!this.run || !this.player) return null;
-    const stage = MISSION_STAGES[this.run.stageIndex];
+    const stage = MISSION_STAGES[this.run.pendingStageIndex];
     const availability = {
       repair: this.player.health < this.player.maxHealth,
       ammo: this.player.ammo < this.player.maxAmmo,
@@ -414,7 +415,12 @@ export class Game {
 
   beginStage() {
     if (this.state !== "room") return false;
-    const stage = MISSION_STAGES[this.run.stageIndex];
+    const stageIndex = this.run.pendingStageIndex;
+    const stage = MISSION_STAGES[stageIndex];
+    this.run.stageIndex = stageIndex;
+    this.run.stageQueue = [...stage.enemies];
+    this.run.stageDefeated = 0;
+    this.run.mission = stage.id;
     this.state = "playing";
     this.run.spawnTimer = 0.45;
     audio.resumeMusic();
@@ -737,7 +743,6 @@ export class Game {
     const run = this.run;
     const cleared = MISSION_STAGES[run.stageIndex];
     const nextIndex = run.stageIndex + 1;
-    const next = MISSION_STAGES[nextIndex];
     const uncollectedEnergy = this.pickups.reduce((sum, pickup) => sum + pickup.value, 0);
     if (uncollectedEnergy > 0) {
       run.energy += uncollectedEnergy;
@@ -745,11 +750,10 @@ export class Game {
       this.pickups = [];
       audio.pickup();
     }
-    run.stageIndex = nextIndex;
-    run.stageQueue = [...next.enemies];
-    run.stageDefeated = 0;
+    run.pendingStageIndex = nextIndex;
+    run.stageQueue = [];
     run.spawnTimer = 0.45;
-    run.mission = next.id;
+    run.mission = "ROOM";
     this.projectiles = [];
     this.enemyProjectiles = [];
     this.player.x = GAME.width / 2;
@@ -1152,16 +1156,17 @@ export class Game {
     if (!this.run || !this.player) return;
     const player = this.player;
     const melee = WEAPONS[this.run.core.weapon];
-    const stage = MISSION_STAGES[this.run.stageIndex];
-    const stageProgress = clamp(this.run.stageDefeated / stage.enemies.length, 0, 1);
+    const displayStageIndex = this.state === "room" ? this.run.pendingStageIndex : this.run.stageIndex;
+    const stage = MISSION_STAGES[displayStageIndex];
+    const stageProgress = this.state === "room" ? 0 : clamp(this.run.stageDefeated / stage.enemies.length, 0, 1);
     const remainingTargets = Math.max(0, stage.enemies.length - this.run.stageDefeated);
     this.callbacks.onHud?.({
-      mission: this.run.mission,
+      mission: this.state === "room" ? "ROOM" : this.run.mission,
       health: player.health,
       maxHealth: player.maxHealth,
       shield: player.stamina,
       shieldMax: player.maxStamina,
-      progress: clamp((this.run.stageIndex + stageProgress) / MISSION_STAGES.length, 0, 1),
+      progress: clamp((displayStageIndex + stageProgress) / MISSION_STAGES.length, 0, 1),
       phase: this.state === "room" ? "整备房间" : stage.name,
       objective: this.state === "room" ? `准备进入 ${stage.id} ${stage.name}` : stage.boss ? "击败零号执行体" : `清除本关目标 · 剩余 ${remainingTargets}`,
       time: formatTime(this.run.elapsed),
@@ -1260,7 +1265,7 @@ export class Game {
       { ground: "#0b0815", grid: "rgba(183,125,255,.09)", border: "rgba(183,125,255,.38)" },
       { ground: "#13070e", grid: "rgba(255,70,110,.09)", border: "rgba(255,70,110,.44)" },
     ];
-    const palette = palettes[this.run?.stageIndex || 0] || palettes[0];
+    const palette = this.state === "room" ? palettes[0] : palettes[this.run?.stageIndex || 0] || palettes[0];
     ctx.fillStyle = palette.ground;
     ctx.fillRect(0, 0, GAME.width, GAME.height);
     ctx.strokeStyle = palette.grid;

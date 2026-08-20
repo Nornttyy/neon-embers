@@ -1,4 +1,4 @@
-const CACHE_VERSION = "neon-embers-v14-preparation-room";
+const CACHE_VERSION = "neon-embers-v15-room-stage-separation";
 const APP_SHELL = [
   "./",
   "./index.html",

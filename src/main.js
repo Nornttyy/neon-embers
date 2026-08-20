@@ -52,7 +52,7 @@ const elements = {
   metaGrid: byId("meta-grid"),
   roomGrid: byId("room-grid"),
   roomStage: byId("room-stage"),
-  roomTitle: byId("room-title"),
+  roomStageName: byId("room-stage-name"),
   roomSubtitle: byId("room-subtitle"),
   roomEnergy: byId("room-energy"),
   roomHealth: byId("room-health"),
@@ -216,7 +216,7 @@ function renderHud(data) {
 function renderRoom(data) {
   if (!data) return;
   elements.roomStage.textContent = data.stage.id;
-  elements.roomTitle.textContent = data.stage.name;
+  elements.roomStageName.textContent = data.stage.name;
   elements.roomSubtitle.textContent = data.stage.subtitle;
   elements.roomEnergy.textContent = data.energy;
   elements.roomHealth.textContent = `${data.health} / ${data.maxHealth}`;
