@@ -1,6 +1,6 @@
-import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=74bfda676dbb";
-import { audio } from "./audio.js?v=74bfda676dbb";
-import { assetUrl } from "./revision.js?v=74bfda676dbb";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=2933f99a7b8a";
+import { audio } from "./audio.js?v=2933f99a7b8a";
+import { assetUrl } from "./revision.js?v=2933f99a7b8a";
 
 const TAU = Math.PI * 2;
 const MAX_ASSET_LOAD_ATTEMPTS = 3;
@@ -17,11 +17,11 @@ const PLAYER_SPRITE_SCALE = Object.freeze({
 });
 const ENEMY_SPRITES = Object.freeze({
   chaser: "enemyMelee",
-  skitter: "enemyMelee",
-  lancer: "enemyMelee",
+  skitter: "skitterDrone",
+  lancer: "lancerDrone",
   shooter: "enemyRanged",
   brute: "enemyBrute",
-  sentinel: "enemyShield",
+  sentinel: "enemySentinel",
   elite: "enemyElite",
   boss: "enemyBoss",
 });
@@ -39,10 +39,93 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const lerp = (a, b, amount) => a + (b - a) * amount;
 const distanceSquared = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
 const randomBetween = (min, max) => min + Math.random() * (max - min);
+const VFX_KEYFRAMES = Object.freeze({
+  burst: Object.freeze([
+    { at: 0, scale: 0.24, alpha: 0, rotation: -0.08 },
+    { at: 0.08, scale: 0.58, alpha: 0.88, rotation: -0.045 },
+    { at: 0.18, scale: 0.9, alpha: 1, rotation: -0.018 },
+    { at: 0.32, scale: 1.08, alpha: 0.94, rotation: 0.012 },
+    { at: 0.48, scale: 1.18, alpha: 0.78, rotation: 0.038 },
+    { at: 0.65, scale: 1.25, alpha: 0.56, rotation: 0.06 },
+    { at: 0.82, scale: 1.31, alpha: 0.28, rotation: 0.078 },
+    { at: 1, scale: 1.35, alpha: 0, rotation: 0.09 },
+  ]),
+  pulse: Object.freeze([
+    { at: 0, scale: 0.18, alpha: 0, rotation: -0.03 },
+    { at: 0.1, scale: 0.42, alpha: 0.72, rotation: -0.018 },
+    { at: 0.22, scale: 0.67, alpha: 1, rotation: -0.006 },
+    { at: 0.36, scale: 0.9, alpha: 0.92, rotation: 0.008 },
+    { at: 0.52, scale: 1.08, alpha: 0.74, rotation: 0.02 },
+    { at: 0.68, scale: 1.2, alpha: 0.52, rotation: 0.032 },
+    { at: 0.84, scale: 1.28, alpha: 0.25, rotation: 0.042 },
+    { at: 1, scale: 1.34, alpha: 0, rotation: 0.05 },
+  ]),
+  loop: Object.freeze([
+    { at: 0, scale: 0.97, alpha: 0.7, rotation: -0.018 },
+    { at: 0.14, scale: 1, alpha: 0.82, rotation: -0.01 },
+    { at: 0.28, scale: 1.025, alpha: 0.92, rotation: 0 },
+    { at: 0.42, scale: 1.045, alpha: 1, rotation: 0.012 },
+    { at: 0.57, scale: 1.035, alpha: 0.94, rotation: 0.018 },
+    { at: 0.71, scale: 1.012, alpha: 0.84, rotation: 0.008 },
+    { at: 0.86, scale: 0.988, alpha: 0.76, rotation: -0.008 },
+    { at: 1, scale: 0.97, alpha: 0.7, rotation: -0.018 },
+  ]),
+  travel: Object.freeze([
+    { at: 0, scale: 0.92, alpha: 0.78, rotation: -0.018 },
+    { at: 0.14, scale: 1.04, alpha: 1, rotation: -0.01 },
+    { at: 0.28, scale: 1.1, alpha: 0.9, rotation: 0 },
+    { at: 0.42, scale: 0.98, alpha: 0.82, rotation: 0.012 },
+    { at: 0.57, scale: 0.9, alpha: 0.76, rotation: 0.018 },
+    { at: 0.71, scale: 0.98, alpha: 0.86, rotation: 0.008 },
+    { at: 0.86, scale: 1.08, alpha: 0.96, rotation: -0.008 },
+    { at: 1, scale: 0.92, alpha: 0.78, rotation: -0.018 },
+  ]),
+  telegraphPulse8: Object.freeze([
+    { at: 0, scale: 0.92, alpha: 0.24, rotation: -0.012 },
+    { at: 0.14, scale: 0.95, alpha: 0.42, rotation: -0.008 },
+    { at: 0.28, scale: 0.94, alpha: 0.31, rotation: -0.004 },
+    { at: 0.42, scale: 0.98, alpha: 0.58, rotation: 0 },
+    { at: 0.57, scale: 0.97, alpha: 0.44, rotation: 0.004 },
+    { at: 0.71, scale: 1.01, alpha: 0.76, rotation: 0.008 },
+    { at: 0.86, scale: 1, alpha: 0.62, rotation: 0.01 },
+    { at: 1, scale: 1.04, alpha: 1, rotation: 0.012 },
+  ]),
+  heavyPulse10: Object.freeze([
+    { at: 0, scale: 0.9, alpha: 0.2, rotation: -0.06 },
+    { at: 0.11, scale: 0.94, alpha: 0.38, rotation: -0.048 },
+    { at: 0.22, scale: 0.93, alpha: 0.28, rotation: -0.034 },
+    { at: 0.33, scale: 0.97, alpha: 0.52, rotation: -0.02 },
+    { at: 0.44, scale: 0.96, alpha: 0.4, rotation: -0.006 },
+    { at: 0.56, scale: 1, alpha: 0.68, rotation: 0.01 },
+    { at: 0.67, scale: 0.99, alpha: 0.54, rotation: 0.026 },
+    { at: 0.78, scale: 1.03, alpha: 0.82, rotation: 0.04 },
+    { at: 0.89, scale: 1.02, alpha: 0.7, rotation: 0.052 },
+    { at: 1, scale: 1.06, alpha: 1, rotation: 0.064 },
+  ]),
+});
 const formatTime = (seconds) => {
   const safe = Math.max(0, Math.ceil(seconds));
   return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
 };
+
+function sampleKeyframes(frames, progress) {
+  const position = clamp(progress, 0, 1);
+  let previous = frames[0];
+  for (let index = 1; index < frames.length; index += 1) {
+    const next = frames[index];
+    if (position <= next.at) {
+      const span = Math.max(0.0001, next.at - previous.at);
+      const amount = (position - previous.at) / span;
+      return {
+        scale: lerp(previous.scale, next.scale, amount),
+        alpha: lerp(previous.alpha, next.alpha, amount),
+        rotation: lerp(previous.rotation, next.rotation, amount),
+      };
+    }
+    previous = next;
+  }
+  return { scale: previous.scale, alpha: previous.alpha, rotation: previous.rotation };
+}
 
 function normalized(x, y) {
   const length = Math.hypot(x, y);
@@ -81,13 +164,37 @@ export class Game {
       x: Math.random(), y: Math.random(), size: randomBetween(0.5, 2.1), phase: Math.random() * TAU,
     }));
     this.images = {};
+    this.patterns = {};
     this.assetLoadState = { ready: false, loaded: 0, failed: [] };
     const assetEntries = Object.entries({
-      vfxSlash: "assets/effects/slash-arc.png",
-      vfxImpact: "assets/effects/bullet-impact.png",
-      vfxBlock: "assets/effects/block-shield.png",
-      vfxDash: "assets/effects/dash-streak.png",
-      vfxBoss: "assets/effects/boss-burst.png",
+      guardField: "assets/effects/guard-field.png",
+      parryFlash: "assets/effects/parry-flash.png",
+      guardBreak: "assets/effects/guard-break.png",
+      pulseWave: "assets/effects/pulse-wave.png",
+      overdriveAura: "assets/effects/overdrive-aura.png",
+      barrierShell: "assets/effects/barrier-shell.png",
+      railRound: "assets/effects/rail-round.png",
+      enemyBolt: "assets/effects/enemy-bolt.png",
+      bossBolt: "assets/effects/boss-bolt.png",
+      railMuzzle: "assets/effects/rail-muzzle.png",
+      enemyMuzzle: "assets/effects/enemy-muzzle.png",
+      enemySwing: "assets/effects/enemy-swing.png",
+      attackTelegraph: "assets/effects/attack-telegraph.png",
+      heavyTelegraph: "assets/effects/heavy-telegraph.png",
+      lancerTrail: "assets/effects/lancer-trail.png",
+      enemySpawn: "assets/effects/enemy-spawn.png",
+      bladeHit: "assets/effects/blade-hit.png",
+      twinHit: "assets/effects/twin-hit.png",
+      hammerHit: "assets/effects/hammer-hit.png",
+      railHit: "assets/effects/rail-hit.png",
+      guardHit: "assets/effects/guard-hit.png",
+      barrierHit: "assets/effects/barrier-hit.png",
+      enemyDestroy: "assets/effects/enemy-destroy.png",
+      pickupCollect: "assets/effects/pickup-collect.png",
+      enemyShield: "assets/effects/enemy-shield.png",
+      dashStreak: "assets/effects/dash-streak-hard.png",
+      bossBurst: "assets/effects/boss-burst-hard.png",
+      energySpark: "assets/effects/energy-spark.png",
       blade: WEAPONS.blade.asset,
       twin: WEAPONS.twin.asset,
       hammer: WEAPONS.hammer.asset,
@@ -97,11 +204,20 @@ export class Game {
       playerStorm: CORES.storm.bodyAsset,
       playerBastion: CORES.bastion.bodyAsset,
       enemyMelee: "assets/enemies/melee-drone.png",
+      skitterDrone: "assets/enemies/skitter-drone.png",
+      lancerDrone: "assets/enemies/lancer-drone.png",
       enemyRanged: "assets/enemies/ranged-drone.png",
       enemyBrute: "assets/enemies/brute-drone.png",
-      enemyShield: "assets/enemies/shield-drone.png",
+      enemySentinel: "assets/enemies/shield-drone.png",
       enemyElite: "assets/enemies/elite-drone.png",
       enemyBoss: "assets/enemies/boss-drone.png",
+      floorRoom: "assets/world/room-floor.png",
+      floorOuter: "assets/world/outer-floor.png",
+      floorBlockade: "assets/world/blockade-floor.png",
+      floorCore: "assets/world/core-floor.png",
+      arenaBarrier: "assets/world/arena-barrier.png",
+      arenaVent: "assets/world/arena-vent.png",
+      terminal: "assets/world/energy-terminal.png",
       pylon: "assets/world/arena-pylon.png",
     });
     this.assetLoadState.total = assetEntries.length;
@@ -118,7 +234,7 @@ export class Game {
   loadImageAsset(id, path) {
     const image = new Image();
     image.decoding = "async";
-    image.fetchPriority = id.startsWith("vfx") || id.startsWith("player") ? "high" : "auto";
+    image.fetchPriority = id.startsWith("player") || ["guardField", "railRound", "enemyBolt", "dashStreak"].includes(id) ? "high" : "auto";
     this.images[id] = image;
 
     return new Promise((resolve) => {
@@ -263,11 +379,14 @@ export class Game {
       life: 1.1,
       damage: WEAPONS.rail.damage * player.stats.rangedDamage,
       color: WEAPONS.rail.color,
+      spriteKey: "railRound",
+      animationPhase: Math.random(),
       hit: new Set(),
     });
     player.ammo -= 1;
     player.rangedCooldown = WEAPONS.rail.cooldown;
-    this.effects.push({ type: "muzzle", x: player.x + direction.x * 33, y: player.y + direction.y * 33, angle: player.facing, life: 0.12, maxLife: 0.12, color: WEAPONS.rail.color });
+    player.rangedPoseTimer = 0.2;
+    this.effects.push({ type: "railMuzzle", x: player.x + direction.x * 52, y: player.y + direction.y * 52, angle: player.facing, radius: 70, life: 0.14, maxLife: 0.14, color: WEAPONS.rail.color });
     audio.shoot("rail");
     if (player.ammo <= 0) this.startReload();
   }
@@ -289,13 +408,13 @@ export class Game {
           this.damageEnemy(enemy, 58 * player.stats.meleeDamage, "skill", direction, 300);
         }
       }
-      this.effects.push({ type: "ring", x: player.x, y: player.y, radius: 190, life: 0.42, maxLife: 0.42, color: "#4df6ff" });
+      this.effects.push({ type: "pulseWave", x: player.x, y: player.y, angle: player.facing, radius: 390, life: 0.46, maxLife: 0.46, color: "#4df6ff" });
     } else if (this.run.core.skill === "overdrive") {
       player.overdrive = 5;
-      this.effects.push({ type: "ring", x: player.x, y: player.y, radius: 95, life: 0.5, maxLife: 0.5, color: "#b77dff" });
+      this.effects.push({ type: "overdriveAura", x: player.x, y: player.y, angle: player.facing, radius: 148, life: 0.5, maxLife: 0.5, color: "#b77dff" });
     } else {
       player.barrier = Math.max(player.barrier, 55);
-      this.effects.push({ type: "ring", x: player.x, y: player.y, radius: 82, life: 0.5, maxLife: 0.5, color: "#ffcc66" });
+      this.effects.push({ type: "barrierShell", x: player.x, y: player.y, angle: player.facing, radius: 126, life: 0.54, maxLife: 0.54, color: "#ffcc66" });
     }
     audio.skill(this.run.core.skill);
     this.spawnBurst(player.x, player.y, this.run.core.color, 22, 210);
@@ -356,6 +475,7 @@ export class Game {
       dashCooldown: 0,
       dashVector: { x: 1, y: 0 },
       rangedCooldown: 0,
+      rangedPoseTimer: 0,
       maxAmmo: WEAPONS.rail.ammo,
       ammo: WEAPONS.rail.ammo,
       reloadTimer: 0,
@@ -593,6 +713,7 @@ export class Game {
     player.invulnerable = Math.max(0, player.invulnerable - dt);
     player.dashCooldown = Math.max(0, player.dashCooldown - dt);
     player.rangedCooldown = Math.max(0, player.rangedCooldown - dt);
+    player.rangedPoseTimer = Math.max(0, player.rangedPoseTimer - dt);
     player.skillCooldown = Math.max(0, player.skillCooldown - dt);
     player.parryTimer = Math.max(0, player.parryTimer - dt);
     player.staminaDelay = Math.max(0, player.staminaDelay - dt);
@@ -621,7 +742,7 @@ export class Game {
         player.dashVector = dashDirection;
         player.invulnerable = GAME.dashDuration + 0.05;
         this.effects.push({
-          type: "dashSprite", x: player.x, y: player.y,
+          type: "dashStreak", x: player.x, y: player.y,
           angle: Math.atan2(dashDirection.y, dashDirection.x),
           radius: 176, life: 0.24, maxLife: 0.24, color: this.run.core.color,
         });
@@ -656,7 +777,6 @@ export class Game {
       direction = player.dashVector;
       speed = GAME.dashSpeed;
       if (player.dashTime <= 0) player.action = "idle";
-      if (Math.random() < 0.8) this.particles.push({ x: player.x, y: player.y, vx: -direction.x * 100, vy: -direction.y * 100, life: 0.26, maxLife: 0.26, size: 18, color: this.run.core.color, type: "trail" });
     } else if (player.action === "block") {
       speed *= 0.44;
     } else if (player.action === "attack") {
@@ -683,7 +803,6 @@ export class Game {
     player.attackTimer = 0;
     player.attackDuration = combo[index].duration / (player.stats.attackSpeed * overdrive);
     player.attackHit = new Set();
-    player.attackVfxFired = false;
     player.comboQueued = false;
     if (combo[index].lunge) {
       player.x = clamp(player.x + Math.cos(player.facing) * combo[index].lunge, 42, GAME.width - 42);
@@ -698,21 +817,6 @@ export class Game {
     const speedMultiplier = moveDefinition.duration / player.attackDuration;
     player.attackTimer += dt;
     const definitionTime = player.attackTimer * speedMultiplier;
-    if (!player.attackVfxFired && definitionTime >= moveDefinition.activeStart) {
-      player.attackVfxFired = true;
-      if (this.run.core.weapon !== "hammer") {
-        const pose = this.getHeldWeaponPose(this.run.elapsed);
-        for (const shape of this.getActiveWeaponShapes(pose)) {
-          this.effects.push({
-            type: "slashSprite", x: player.x, y: player.y,
-            angle: Math.atan2(shape.end.y - shape.start.y, shape.end.x - shape.start.x),
-            radius: moveDefinition.range * (this.run.core.weapon === "twin" ? 2.2 : 2.45),
-            life: 0.22, maxLife: 0.22, color: this.run.core.color,
-            flipY: shape.hand === "offhand",
-          });
-        }
-      }
-    }
     if (definitionTime >= moveDefinition.activeStart && definitionTime <= moveDefinition.activeEnd) this.performMeleeHit(moveDefinition);
     if (player.attackTimer >= player.attackDuration) {
       if (player.comboQueued && player.attackIndex < 2) this.startAttack(player.attackIndex + 1);
@@ -867,9 +971,15 @@ export class Game {
       pushX: 0,
       pushY: 0,
       rotation: 0,
+      trailTimer: 0,
       dead: false,
     };
     this.enemies.push(enemy);
+    this.effects.push({
+      type: "enemySpawn", x: enemy.x, y: enemy.y, angle: angle + Math.PI,
+      radius: enemy.boss ? 210 : enemy.elite ? 128 : 94,
+      life: enemy.boss ? 0.72 : 0.42, maxLife: enemy.boss ? 0.72 : 0.42, color: enemy.color,
+    });
     return enemy;
   }
 
@@ -881,6 +991,7 @@ export class Game {
       enemy.stun = Math.max(0, enemy.stun - dt);
       enemy.shootTimer -= dt;
       enemy.burstTimer -= dt;
+      enemy.trailTimer = Math.max(0, enemy.trailTimer - dt);
       enemy.pushX *= Math.exp(-dt * 8);
       enemy.pushY *= Math.exp(-dt * 8);
       const dx = this.player.x - enemy.x;
@@ -898,7 +1009,7 @@ export class Game {
             if (distance <= (enemy.reach || 62) + this.player.radius + 28) this.damagePlayer(enemy.damage, enemy, enemy.heavy ? 1.55 : 1);
             enemy.state = "recover";
             enemy.stateTimer = enemy.heavy ? 0.72 : 0.46;
-            this.effects.push({ type: "enemySlash", x: enemy.x, y: enemy.y, angle: enemy.rotation, radius: (enemy.reach || 62) + 20, life: 0.2, maxLife: 0.2, color: enemy.color });
+            this.effects.push({ type: "enemySwing", x: enemy.x, y: enemy.y, angle: enemy.rotation, radius: ((enemy.reach || 62) + 24) * 2, life: 0.24, maxLife: 0.24, color: enemy.color });
           }
         } else if (enemy.state === "recover") {
           enemy.stateTimer -= dt;
@@ -917,6 +1028,13 @@ export class Game {
             if (enemy.lunge && distance < 360) {
               velocityX += direction.x * enemy.speed * 0.55;
               velocityY += direction.y * enemy.speed * 0.55;
+              if (enemy.trailTimer <= 0) {
+                enemy.trailTimer = 0.11;
+                this.effects.push({
+                  type: "lancerTrail", x: enemy.x, y: enemy.y, angle: enemy.rotation,
+                  radius: 118, life: 0.24, maxLife: 0.24, color: enemy.color,
+                });
+              }
             }
           }
           if (enemy.ranged && enemy.shootTimer <= 0 && distance < 720) {
@@ -948,9 +1066,22 @@ export class Game {
         damage: enemy.damage * 0.82,
         life: 4,
         color: enemy.color,
+        spriteKey: enemy.boss ? "bossBolt" : "enemyBolt",
+        animationPhase: Math.random(),
         source: enemy,
       });
     }
+    const angle = Math.atan2(direction.y, direction.x);
+    this.effects.push({
+      type: "enemyMuzzle",
+      x: enemy.x + Math.cos(angle) * enemy.radius,
+      y: enemy.y + Math.sin(angle) * enemy.radius,
+      angle,
+      radius: enemy.boss ? 108 : 72,
+      life: enemy.boss ? 0.22 : 0.16,
+      maxLife: enemy.boss ? 0.22 : 0.16,
+      color: enemy.color,
+    });
     audio.shoot("grenade");
   }
 
@@ -959,9 +1090,14 @@ export class Game {
       const angle = this.run.elapsed * 0.5 + index / count * TAU;
       this.enemyProjectiles.push({
         x: enemy.x, y: enemy.y, vx: Math.cos(angle) * 215, vy: Math.sin(angle) * 215,
-        radius: 8, damage: enemy.damage * 0.65, life: 5, color: "#ff477f", source: enemy,
+        radius: 8, damage: enemy.damage * 0.65, life: 5, color: "#ff477f",
+        spriteKey: "bossBolt", animationPhase: Math.random(), source: enemy,
       });
     }
+    this.effects.push({
+      type: "enemyMuzzle", x: enemy.x, y: enemy.y, angle: this.run.elapsed * 0.5,
+      radius: 138, life: 0.28, maxLife: 0.28, color: enemy.color,
+    });
     audio.shoot("grenade");
   }
 
@@ -1017,12 +1153,17 @@ export class Game {
     }
     this.damageTexts.push({ x: enemy.x, y: enemy.y - enemy.radius, text: String(Math.round(amount)), color: kind === "rail" ? "#c9a6ff" : "#bfffff", life: 0.65, maxLife: 0.65, heavy: heavyImpact });
     if (direction) {
+      const impactType = kind === "rail" || kind === "reflect"
+        ? "railHit"
+        : kind === "melee"
+          ? `${this.run.core.weapon}Hit`
+          : "pulseWave";
       this.effects.push({
-        type: "impact",
+        type: impactType,
         x: enemy.x,
         y: enemy.y,
         angle: Math.atan2(direction.y, direction.x),
-        radius: enemy.boss ? 48 : heavyImpact ? 36 : meleeImpact ? 28 : 22,
+        radius: enemy.boss ? 144 : heavyImpact ? 112 : meleeImpact ? 88 : 72,
         life: heavyImpact ? 0.28 : meleeImpact ? 0.23 : 0.16,
         maxLife: heavyImpact ? 0.28 : meleeImpact ? 0.23 : 0.16,
         color: kind === "rail" ? "#b77dff" : this.run.core.color,
@@ -1056,6 +1197,11 @@ export class Game {
         pulse: Math.random() * TAU,
       });
     }
+    this.effects.push({
+      type: "enemyDestroy", x: enemy.x, y: enemy.y, angle: enemy.rotation,
+      radius: enemy.boss ? 310 : enemy.elite ? 176 : enemy.radius * 5.2,
+      life: enemy.boss ? 0.82 : 0.48, maxLife: enemy.boss ? 0.82 : 0.48, color: enemy.color,
+    });
     this.spawnBurst(enemy.x, enemy.y, enemy.color, enemy.boss ? 48 : 14, enemy.boss ? 300 : 180);
     if (enemy.boss) {
       this.run.boss = enemy;
@@ -1077,7 +1223,7 @@ export class Game {
           source.pushY -= towardSource.y * 240;
         }
         player.stamina = Math.min(player.maxStamina, player.stamina + 10);
-        this.effects.push({ type: "ring", x: player.x, y: player.y, radius: 70, life: 0.3, maxLife: 0.3, color: "#ffffff" });
+        this.effects.push({ type: "parryFlash", x: player.x, y: player.y, angle: player.facing, radius: 150, life: 0.34, maxLife: 0.34, color: "#ffffff" });
         this.callbacks.onAnnouncement?.({ title: "精准招架", subtitle: "攻击者已失衡" });
         audio.guard(true);
         return "parry";
@@ -1085,27 +1231,41 @@ export class Game {
       const staminaCost = amount * 0.82 * guardPressure * player.stats.guardEfficiency;
       player.stamina -= staminaCost;
       player.staminaDelay = 0.7;
-      this.effects.push({ type: "block", x: player.x, y: player.y, angle: player.facing, life: 0.2, maxLife: 0.2, color: "#4df6ff" });
+      this.effects.push({ type: "guardHit", x: player.x, y: player.y, angle: player.facing, radius: 142, life: 0.22, maxLife: 0.22, color: "#4df6ff" });
       audio.guard(false);
       if (player.stamina <= 0) {
         this.breakGuard();
-        this.applyHealthDamage(amount * 0.42);
+        this.applyHealthDamage(amount * 0.42, source);
         return "broken";
       }
       this.damageTexts.push({ x: player.x, y: player.y - 38, text: "格挡", color: "#4df6ff", life: 0.55, maxLife: 0.55 });
       return "block";
     }
-    this.applyHealthDamage(amount);
+    this.applyHealthDamage(amount, source);
     return "hit";
   }
 
-  applyHealthDamage(amount) {
+  applyHealthDamage(amount, source = null) {
     const player = this.player;
     let remaining = amount;
+    let absorbed = 0;
     if (player.barrier > 0) {
-      const absorbed = Math.min(player.barrier, remaining);
+      absorbed = Math.min(player.barrier, remaining);
       player.barrier -= absorbed;
       remaining -= absorbed;
+    }
+    if (absorbed > 0) {
+      const barrierAngle = source ? Math.atan2(source.y - player.y, source.x - player.x) : player.facing;
+      this.effects.push({
+        type: "barrierHit", x: player.x, y: player.y, angle: barrierAngle,
+        radius: 138, life: 0.26, maxLife: 0.26, color: "#ffcc66",
+      });
+    }
+    if (remaining <= 0) {
+      player.invulnerable = 0.46;
+      this.shake = Math.max(this.shake, 4);
+      audio.guard(false);
+      return;
     }
     if (remaining > 0) player.health -= remaining;
     player.invulnerable = 0.46;
@@ -1123,6 +1283,10 @@ export class Game {
     player.action = "broken";
     player.actionTimer = 0.9;
     player.staminaDelay = 1.1;
+    this.effects.push({
+      type: "guardBreak", x: player.x, y: player.y, angle: player.facing,
+      radius: 168, life: 0.46, maxLife: 0.46, color: "#ffcc66",
+    });
     this.callbacks.onAnnouncement?.({ title: "防御过载", subtitle: "体力耗尽" });
     this.shake = 8;
   }
@@ -1140,7 +1304,7 @@ export class Game {
         pickup.y += dy / distance * speed * dt;
       }
       if (distance < this.player.radius + pickup.radius + 8) {
-        this.collectEnergy(pickup.value);
+        this.collectEnergy(pickup.value, pickup);
         continue;
       }
       remaining.push(pickup);
@@ -1148,9 +1312,13 @@ export class Game {
     this.pickups = remaining;
   }
 
-  collectEnergy(value) {
+  collectEnergy(value, pickup = this.player) {
     this.run.energy += value;
     this.run.energyEarned += value;
+    this.effects.push({
+      type: "pickupCollect", x: pickup.x, y: pickup.y, angle: Math.atan2(this.player.y - pickup.y, this.player.x - pickup.x),
+      radius: 88, life: 0.32, maxLife: 0.32, color: "#4df6ff",
+    });
     audio.pickup();
   }
 
@@ -1190,18 +1358,20 @@ export class Game {
   }
 
   spawnBurst(x, y, color, count = 8, speed = 140) {
-    for (let index = 0; index < count; index += 1) {
+    const spriteCount = clamp(Math.ceil(count / 5), 1, 8);
+    for (let index = 0; index < spriteCount; index += 1) {
       const angle = Math.random() * TAU;
-      const velocity = randomBetween(speed * 0.35, speed);
-      this.particles.push({
-        x, y,
-        vx: Math.cos(angle) * velocity,
-        vy: Math.sin(angle) * velocity,
-        life: randomBetween(0.22, 0.55),
-        maxLife: 0.55,
-        size: randomBetween(2, 6),
+      const travel = randomBetween(2, Math.max(3, speed * 0.035));
+      const life = randomBetween(0.24, 0.42);
+      this.effects.push({
+        type: "energySpark",
+        x: x + Math.cos(angle) * travel,
+        y: y + Math.sin(angle) * travel,
+        angle,
+        radius: randomBetween(34, 58),
+        life,
+        maxLife: life,
         color,
-        type: "spark",
       });
     }
   }
@@ -1339,35 +1509,58 @@ export class Game {
       { ground: "#13070e", grid: "rgba(255,70,110,.09)", border: "rgba(255,70,110,.44)" },
     ];
     const palette = this.state === "room" ? palettes[0] : palettes[this.run?.stageIndex || 0] || palettes[0];
-    ctx.fillStyle = palette.ground;
+    const floorKey = this.state === "room"
+      ? "floorRoom"
+      : ["floorOuter", "floorBlockade", "floorCore"][this.run?.stageIndex || 0] || "floorOuter";
+    const floorPattern = this.getFloorPattern(ctx, floorKey);
+    ctx.fillStyle = floorPattern || palette.ground;
     ctx.fillRect(0, 0, GAME.width, GAME.height);
-    ctx.strokeStyle = palette.grid;
-    ctx.lineWidth = 1;
-    const grid = 80;
-    for (let x = 0; x <= GAME.width; x += grid) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, GAME.height); ctx.stroke();
-    }
-    for (let y = 0; y <= GAME.height; y += grid) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GAME.width, y); ctx.stroke();
-    }
     for (const decoration of this.decorations) {
-      if (decoration.prop && this.images.pylon.complete && this.images.pylon.naturalWidth) {
-        const width = 68 + decoration.kind * 6;
-        const height = width * this.images.pylon.naturalHeight / this.images.pylon.naturalWidth;
-        ctx.save();
-        ctx.translate(decoration.x, decoration.y);
-        ctx.shadowColor = decoration.kind % 2 ? "rgba(183,125,255,.34)" : "rgba(77,246,255,.3)";
-        ctx.shadowBlur = 10;
-        ctx.drawImage(this.images.pylon, -width / 2, -height / 2, width, height);
-        ctx.restore();
-        continue;
+      const angle = ((decoration.x * 0.013 + decoration.y * 0.007) % TAU) - Math.PI;
+      if (decoration.prop) {
+        this.drawWorldProp(ctx, "pylon", decoration.x, decoration.y, 68 + decoration.kind * 6, angle, palette.border);
+      } else if (decoration.kind === 0) {
+        this.drawWorldProp(ctx, "arenaVent", decoration.x, decoration.y, 44 + decoration.size * 2, angle, palette.grid);
       }
-      ctx.fillStyle = decoration.kind === 0 ? "rgba(77,246,255,.15)" : "rgba(183,125,255,.08)";
-      ctx.fillRect(decoration.x, decoration.y, decoration.size * 2.6, decoration.size);
     }
-    ctx.strokeStyle = palette.border;
-    ctx.lineWidth = 4;
-    ctx.strokeRect(20, 20, GAME.width - 40, GAME.height - 40);
+    if (this.state === "room") {
+      this.drawWorldProp(ctx, "terminal", GAME.width / 2 + 165, GAME.height / 2 - 10, 156, -0.18, "#4df6ff");
+    }
+    this.renderArenaBoundary(ctx, palette.border);
+  }
+
+  getFloorPattern(ctx, imageKey) {
+    const image = this.images[imageKey];
+    if (!image?.complete || !image.naturalWidth || typeof ctx.createPattern !== "function") return null;
+    if (!this.patterns[imageKey]) this.patterns[imageKey] = ctx.createPattern(image, "repeat");
+    return this.patterns[imageKey];
+  }
+
+  drawWorldProp(ctx, imageKey, x, y, width, angle = 0, glow = "#4df6ff") {
+    const image = this.images[imageKey];
+    if (!image?.complete || !image.naturalWidth) return false;
+    const height = width * image.naturalHeight / image.naturalWidth;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 8;
+    ctx.drawImage(image, -width / 2, -height / 2, width, height);
+    ctx.restore();
+    return true;
+  }
+
+  renderArenaBoundary(ctx, glow) {
+    const horizontalStep = 150;
+    const verticalStep = 132;
+    for (let x = 55; x < GAME.width - 40; x += horizontalStep) {
+      this.drawWorldProp(ctx, "arenaBarrier", x, 27, 148, 0, glow);
+      this.drawWorldProp(ctx, "arenaBarrier", x, GAME.height - 27, 148, Math.PI, glow);
+    }
+    for (let y = 100; y < GAME.height - 70; y += verticalStep) {
+      this.drawWorldProp(ctx, "arenaBarrier", 27, y, 132, Math.PI / 2, glow);
+      this.drawWorldProp(ctx, "arenaBarrier", GAME.width - 27, y, 132, -Math.PI / 2, glow);
+    }
   }
 
   renderPickups(ctx) {
@@ -1391,38 +1584,60 @@ export class Game {
 
   renderProjectiles(ctx) {
     for (const projectile of this.projectiles) {
-      ctx.strokeStyle = projectile.color;
-      ctx.lineWidth = projectile.radius * 1.5;
-      ctx.shadowColor = projectile.color;
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.moveTo(projectile.x, projectile.y);
-      ctx.lineTo(projectile.x - projectile.vx * 0.025, projectile.y - projectile.vy * 0.025);
-      ctx.stroke();
+      this.drawKeyframedSprite(ctx, projectile.spriteKey || "railRound", {
+        ...projectile,
+        angle: Math.atan2(projectile.vy, projectile.vx),
+      }, projectile.radius * 14, {
+        animation: "travel",
+        phase: (this.run.elapsed * 7.5 + (projectile.animationPhase || 0)) % 1,
+        offset: -projectile.radius * 6,
+      });
     }
     for (const projectile of this.enemyProjectiles) {
-      ctx.fillStyle = projectile.color;
-      ctx.shadowColor = projectile.color;
-      ctx.shadowBlur = 12;
-      ctx.beginPath(); ctx.arc(projectile.x, projectile.y, projectile.radius, 0, TAU); ctx.fill();
+      this.drawKeyframedSprite(ctx, projectile.spriteKey || "enemyBolt", {
+        ...projectile,
+        angle: Math.atan2(projectile.vy, projectile.vx),
+      }, projectile.radius * (projectile.spriteKey === "bossBolt" ? 10 : 9), {
+        animation: "travel",
+        phase: (this.run.elapsed * 5.5 + (projectile.animationPhase || 0)) % 1,
+        offset: -projectile.radius * (projectile.spriteKey === "bossBolt" ? 4.2 : 3.8),
+      });
     }
-    ctx.shadowBlur = 0;
   }
 
   renderEnemy(ctx, enemy, time) {
     if (enemy.dead) return;
+    const telegraph = enemy.state === "windup";
+    if (telegraph) {
+      const windup = enemy.windup || 0.5;
+      const progress = clamp(1 - enemy.stateTimer / windup, 0, 1);
+      const telegraphRadius = (enemy.reach || 58) + 25;
+      const heavyTelegraph = enemy.boss || enemy.heavy;
+      const telegraphWidth = heavyTelegraph ? telegraphRadius * 2 : telegraphRadius * 1.3;
+      const materialWidth = telegraphWidth / 0.88;
+      this.drawKeyframedSprite(ctx, heavyTelegraph ? "heavyTelegraph" : "attackTelegraph", {
+        x: enemy.x, y: enemy.y, angle: enemy.rotation,
+      }, materialWidth, {
+        animation: heavyTelegraph ? "heavyPulse10" : "telegraphPulse8",
+        phase: progress,
+        alpha: heavyTelegraph ? 0.9 : 0.82,
+        offset: heavyTelegraph ? 0 : telegraphWidth * 0.278,
+        composite: "source-over",
+      });
+    }
+    if (enemy.shielded) {
+      this.drawKeyframedSprite(ctx, "enemyShield", {
+        x: enemy.x, y: enemy.y, angle: enemy.rotation,
+      }, enemy.radius * 4.7, {
+        animation: "loop",
+        phase: (time * 0.7 + enemy.x * 0.001) % 1,
+        alpha: enemy.hitFlash > 0 ? 0.94 : 0.68,
+        offset: enemy.radius * 0.68,
+      });
+    }
     ctx.save();
     ctx.translate(enemy.x, enemy.y);
     ctx.rotate(enemy.rotation);
-    const telegraph = enemy.state === "windup";
-    if (telegraph) {
-      ctx.fillStyle = enemy.heavy ? "rgba(255,55,85,.2)" : "rgba(255,160,90,.14)";
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, (enemy.reach || 58) + 25, -0.55, 0.55);
-      ctx.closePath();
-      ctx.fill();
-    }
     ctx.shadowColor = enemy.color;
     ctx.shadowBlur = enemy.elite || enemy.boss ? 14 : 0;
     const sprite = this.images[ENEMY_SPRITES[enemy.id]];
@@ -1430,8 +1645,6 @@ export class Game {
       const width = enemy.radius * (ENEMY_SPRITE_SCALE[enemy.id] || 2.9);
       const height = width * sprite.naturalHeight / sprite.naturalWidth;
       if (enemy.hitFlash > 0) ctx.filter = "brightness(2.1) saturate(.35)";
-      else if (enemy.id === "skitter") ctx.filter = "hue-rotate(-18deg) brightness(1.08)";
-      else if (enemy.id === "lancer") ctx.filter = "hue-rotate(20deg) saturate(1.2)";
       ctx.drawImage(sprite, -width / 2, -height / 2, width, height);
       ctx.filter = "none";
     } else {
@@ -1453,11 +1666,16 @@ export class Game {
       ctx.beginPath(); ctx.arc(enemy.radius * 0.18, 0, enemy.radius * 0.3, 0, TAU); ctx.fill();
       ctx.globalAlpha = 1;
     }
-    if (enemy.stun > 0) {
-      ctx.strokeStyle = "#ffffff";
-      ctx.beginPath(); ctx.arc(0, 0, enemy.radius + 9 + Math.sin(time * 14) * 2, 0, TAU); ctx.stroke();
-    }
     ctx.restore();
+    if (enemy.stun > 0) {
+      this.drawKeyframedSprite(ctx, "parryFlash", {
+        x: enemy.x, y: enemy.y, angle: enemy.rotation,
+      }, enemy.radius * 3.4, {
+        animation: "loop",
+        phase: (time * 1.8) % 1,
+        alpha: 0.42,
+      });
+    }
     if (enemy.elite || enemy.boss) {
       const width = enemy.boss ? 130 : 72;
       ctx.fillStyle = "rgba(0,0,0,.72)";
@@ -1470,9 +1688,30 @@ export class Game {
   renderPlayer(ctx, time) {
     const player = this.player;
     if (player.invulnerable > 0 && Math.floor(player.invulnerable * 22) % 2 === 0) ctx.globalAlpha = 0.48;
+    if (player.overdrive > 0) {
+      this.drawKeyframedSprite(ctx, "overdriveAura", {
+        x: player.x, y: player.y, angle: player.facing,
+      }, player.radius * 5.8, {
+        animation: "loop",
+        phase: (time * 1.25) % 1,
+        alpha: 0.5,
+        composite: "source-over",
+      });
+    }
+    if (player.barrier > 0) {
+      this.drawKeyframedSprite(ctx, "barrierShell", {
+        x: player.x, y: player.y, angle: player.facing,
+      }, player.radius * 5.35, {
+        animation: "loop",
+        phase: (time * 0.82 + 0.21) % 1,
+        alpha: 0.46,
+        composite: "source-over",
+      });
+    }
     const weaponPose = this.getHeldWeaponPose(time);
     this.drawWeaponTrails(ctx);
     this.drawHeldWeapon(ctx, weaponPose);
+    if (player.rangedPoseTimer > 0) this.drawRangedPistol(ctx);
     this.drawPlayerBody(ctx, time);
 
     const gripAngles = weaponPose.offhandAngle == null
@@ -1494,21 +1733,36 @@ export class Game {
     }
 
     if (player.action === "block") {
-      ctx.strokeStyle = player.parryTimer > 0 ? "#ffffff" : "#4df6ff";
-      ctx.lineWidth = player.parryTimer > 0 ? 6 : 4;
-      ctx.shadowColor = ctx.strokeStyle;
-      ctx.shadowBlur = 15;
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, player.radius + 22, player.facing - 1.05, player.facing + 1.05);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
-    if (player.barrier > 0) {
-      ctx.strokeStyle = "rgba(255,204,102,.82)";
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(player.x, player.y, player.radius + 12, 0, TAU); ctx.stroke();
+      this.drawKeyframedSprite(ctx, "guardField", {
+        x: player.x, y: player.y, angle: player.facing,
+      }, player.radius * 5.8, {
+        animation: "loop",
+        phase: (time * 0.92) % 1,
+        alpha: player.parryTimer > 0 ? 0.78 : 0.56,
+        offset: player.radius * 1.3,
+        composite: "source-over",
+      });
     }
     ctx.globalAlpha = 1;
+  }
+
+  drawRangedPistol(ctx) {
+    const image = this.images.pistol;
+    if (!image?.complete || !image.naturalWidth) return;
+    const player = this.player;
+    const angle = player.facing;
+    const size = 76;
+    const recoil = clamp(player.rangedPoseTimer / 0.2, 0, 1) * 3;
+    ctx.save();
+    ctx.translate(
+      player.x + Math.cos(angle) * (22 - recoil) + Math.cos(angle + Math.PI / 2) * -6,
+      player.y + Math.sin(angle) * (22 - recoil) + Math.sin(angle + Math.PI / 2) * -6,
+    );
+    ctx.rotate(angle);
+    ctx.shadowColor = WEAPONS.rail.color;
+    ctx.shadowBlur = 5;
+    ctx.drawImage(image, -size * 0.34, -size * 0.5, size, size);
+    ctx.restore();
   }
 
   drawWeaponTrails(ctx) {
@@ -1699,100 +1953,82 @@ export class Game {
   }
 
   renderEffects(ctx, behind) {
-    for (const particle of this.particles) {
-      if ((particle.type === "trail") !== behind) continue;
-      const alpha = clamp(particle.life / particle.maxLife, 0, 1);
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = particle.color;
-      if (particle.type === "trail") {
-        ctx.beginPath(); ctx.arc(particle.x, particle.y, particle.size * alpha, 0, TAU); ctx.fill();
-      } else {
-        ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
-      }
-    }
-    ctx.globalAlpha = 1;
     for (const effect of this.effects) {
-      const drawsBehind = ["dashSprite", "slashSprite", "bossBurst"].includes(effect.type);
+      const drawsBehind = [
+        "dashStreak", "bossBurst", "enemySpawn", "lancerTrail",
+        "pulseWave", "overdriveAura", "barrierShell",
+      ].includes(effect.type);
       if (drawsBehind !== behind) continue;
-      const alpha = clamp(effect.life / effect.maxLife, 0, 1);
-      ctx.globalAlpha = alpha;
-      ctx.strokeStyle = effect.color;
-      ctx.fillStyle = effect.color;
-      ctx.lineWidth = 3 + alpha * 4;
-      ctx.shadowColor = effect.color;
-      ctx.shadowBlur = 12;
-      if (effect.type === "dashSprite") {
-        this.drawVfxSprite(ctx, "vfxDash", effect, effect.radius, {
-          alpha: alpha * 0.78,
+      if (effect.type === "dashStreak") {
+        this.drawKeyframedSprite(ctx, "dashStreak", effect, effect.radius, {
+          animation: "burst",
+          alpha: 0.82,
           offset: -54,
-          scale: 0.82 + (1 - alpha) * 0.18,
-        });
-      } else if (effect.type === "slashSprite") {
-        const progress = 1 - alpha;
-        this.drawVfxSprite(ctx, "vfxSlash", effect, effect.radius, {
-          alpha: Math.sin(Math.min(1, progress * 1.35) * Math.PI) * 0.84,
-          scale: 0.72 + progress * 0.42,
-          flipY: effect.flipY,
         });
       } else if (effect.type === "bossBurst") {
-        const progress = 1 - alpha;
-        this.drawVfxSprite(ctx, "vfxBoss", effect, effect.radius, {
-          alpha: Math.min(1, alpha * 1.7) * 0.9,
-          scale: 0.38 + progress * 0.9,
-          rotation: progress * 0.22,
+        this.drawKeyframedSprite(ctx, "bossBurst", effect, effect.radius, {
+          animation: "pulse",
+          alpha: 0.94,
         });
-      } else if (effect.type === "ring") {
-        const progress = 1 - alpha;
-        ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.radius * progress, 0, TAU); ctx.stroke();
-      } else if (effect.type === "impact") {
-        const progress = 1 - alpha;
-        if (this.drawVfxSprite(ctx, "vfxImpact", effect, effect.radius * (effect.heavy ? 3.35 : 2.8), {
-          alpha: alpha * 0.9,
-          scale: 0.62 + progress * 0.62,
-          rotation: effect.angle + progress * 0.18,
-        })) continue;
-        ctx.save();
-        ctx.translate(effect.x, effect.y);
-        ctx.rotate(effect.angle);
-        ctx.lineWidth = (effect.heavy ? 3 : 2) + alpha * (effect.heavy ? 5 : 3);
-        const offsets = effect.heavy ? [-0.62, -0.28, 0, 0.28, 0.62] : [-0.48, 0, 0.48];
-        for (const offset of offsets) {
-          ctx.beginPath();
-          ctx.moveTo(-effect.radius * 0.25, Math.sin(offset) * 8);
-          ctx.lineTo(effect.radius * (0.45 + progress * 0.55), Math.sin(offset) * effect.radius);
-          ctx.stroke();
-        }
-        ctx.globalAlpha *= 0.55;
-        ctx.beginPath(); ctx.arc(0, 0, effect.radius * progress, 0, TAU); ctx.stroke();
-        ctx.restore();
-      } else if (effect.type === "block") {
-        if (this.drawVfxSprite(ctx, "vfxBlock", effect, 146, {
-          alpha: alpha * 0.88,
-          offset: 34,
-          scale: 0.72 + (1 - alpha) * 0.32,
-        })) continue;
-        ctx.beginPath(); ctx.arc(effect.x, effect.y, 55, effect.angle - 0.8, effect.angle + 0.8); ctx.stroke();
-      } else if (effect.type === "enemySlash") {
-        ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.type === "block" ? 55 : effect.radius, effect.angle - 0.8, effect.angle + 0.8); ctx.stroke();
-      } else if (effect.type === "muzzle") {
-        ctx.save(); ctx.translate(effect.x, effect.y); ctx.rotate(effect.angle); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(24, -7); ctx.lineTo(24, 7); ctx.closePath(); ctx.fill(); ctx.restore();
+      } else if (effect.type === "enemySpawn") {
+        this.drawKeyframedSprite(ctx, "enemySpawn", effect, effect.radius, { animation: "pulse", alpha: 0.86 });
+      } else if (effect.type === "lancerTrail") {
+        this.drawKeyframedSprite(ctx, "lancerTrail", effect, effect.radius, { animation: "burst", alpha: 0.76, offset: -34 });
+      } else if (effect.type === "pulseWave") {
+        this.drawKeyframedSprite(ctx, "pulseWave", effect, effect.radius, { animation: "pulse", alpha: 0.72, composite: "screen" });
+      } else if (effect.type === "overdriveAura") {
+        this.drawKeyframedSprite(ctx, "overdriveAura", effect, effect.radius, { animation: "pulse", alpha: 0.82 });
+      } else if (effect.type === "barrierShell") {
+        this.drawKeyframedSprite(ctx, "barrierShell", effect, effect.radius, { animation: "pulse", alpha: 0.84 });
+      } else if (["railMuzzle", "enemyMuzzle"].includes(effect.type)) {
+        this.drawKeyframedSprite(ctx, effect.type, effect, effect.radius, { animation: "burst", alpha: 0.94 });
+      } else if (effect.type === "enemySwing") {
+        this.drawKeyframedSprite(ctx, "enemySwing", effect, effect.radius, { animation: "burst", alpha: 0.88, offset: effect.radius * 0.1 });
+      } else if (["bladeHit", "twinHit", "hammerHit", "railHit"].includes(effect.type)) {
+        this.drawKeyframedSprite(ctx, effect.type, effect, effect.radius, {
+          animation: "burst",
+          alpha: 0.96,
+          rotation: effect.type === "railHit" ? effect.angle + Math.PI : effect.angle,
+        });
+      } else if (effect.type === "guardHit") {
+        this.drawKeyframedSprite(ctx, "guardHit", effect, effect.radius, { animation: "burst", alpha: 0.96, offset: 34 });
+      } else if (effect.type === "parryFlash") {
+        this.drawKeyframedSprite(ctx, "parryFlash", effect, effect.radius, { animation: "burst", alpha: 0.98, offset: 26 });
+      } else if (["guardBreak", "barrierHit", "enemyDestroy", "pickupCollect", "energySpark"].includes(effect.type)) {
+        this.drawKeyframedSprite(ctx, effect.type, effect, effect.radius, {
+          animation: effect.type === "pickupCollect" ? "pulse" : "burst",
+          alpha: effect.type === "energySpark" ? 0.78 : 0.94,
+          offset: effect.type === "barrierHit" ? 24 : 0,
+        });
       }
     }
-    ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
   }
 
-  drawVfxSprite(ctx, imageKey, effect, width, { alpha = 1, offset = 0, scale = 1, rotation = effect.angle, flipY = false } = {}) {
+  drawKeyframedSprite(ctx, imageKey, effect, width, {
+    alpha = 1,
+    offset = 0,
+    scale = 1,
+    rotation = effect.angle || 0,
+    flipY = false,
+    animation = "burst",
+    phase = null,
+    composite = "lighter",
+  } = {}) {
     const image = this.images[imageKey];
     if (!image?.complete || !image.naturalWidth) return false;
-    const drawWidth = width * scale;
+    const lifeProgress = effect.maxLife ? 1 - effect.life / effect.maxLife : 0;
+    const position = phase == null ? clamp(lifeProgress, 0, 1) : clamp(phase, 0, 1);
+    const frame = sampleKeyframes(VFX_KEYFRAMES[animation] || VFX_KEYFRAMES.burst, position);
+    const drawWidth = width * scale * frame.scale;
     const drawHeight = drawWidth * image.naturalHeight / image.naturalWidth;
     ctx.save();
-    ctx.translate(effect.x + Math.cos(effect.angle) * offset, effect.y + Math.sin(effect.angle) * offset);
-    ctx.rotate(rotation);
+    const angle = effect.angle || 0;
+    ctx.translate(effect.x + Math.cos(angle) * offset, effect.y + Math.sin(angle) * offset);
+    ctx.rotate(rotation + frame.rotation);
     ctx.scale(1, flipY ? -1 : 1);
-    ctx.globalAlpha = this.settings.reduceFlash ? alpha * 0.68 : alpha;
-    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha *= (this.settings.reduceFlash ? 0.7 : 1) * alpha * frame.alpha;
+    ctx.globalCompositeOperation = composite;
     ctx.shadowBlur = 0;
     ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
     ctx.restore();

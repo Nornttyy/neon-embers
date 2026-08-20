@@ -323,6 +323,9 @@ h1 span { color: var(--cyan); }
 .currency-line strong { float: right; color: var(--cyan); font-size: 20px; }
 .meta-grid { display: grid; gap: 10px; }
 .meta-item { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center; padding: 17px; border: 1px solid var(--line); background: rgba(7,14,28,.74); }
+.meta-info { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 14px; align-items: center; min-width: 0; }
+.meta-art { display: block; width: 58px; height: 58px; object-fit: contain; filter: drop-shadow(0 0 9px rgba(77,246,255,.35)); }
+.meta-copy { min-width: 0; }
 .meta-item h3 { margin: 0 0 4px; font-size: 15px; }
 .meta-item p { margin: 0; color: var(--muted); font-size: 12px; }
 .meta-level { margin-top: 8px; display: flex; gap: 4px; }
@@ -417,7 +420,8 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
 .room-status strong { display: block; margin-top: 3px; font-size: 15px; }
 .room-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
 .room-item { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 92px; padding: 13px; border: 1px solid var(--line); background: rgba(7,14,28,.82); }
-.room-item-code { display: grid; place-items: center; width: 46px; height: 46px; border: 1px solid rgba(77,246,255,.34); background: rgba(77,246,255,.08); color: var(--cyan); font-size: 15px; font-weight: 950; box-shadow: inset 0 0 18px rgba(77,246,255,.04); }
+.room-item-art { display: grid; place-items: center; width: 46px; height: 46px; overflow: visible; border: 1px solid rgba(77,246,255,.34); background: radial-gradient(circle, rgba(77,246,255,.13), rgba(77,246,255,.035) 68%); box-shadow: inset 0 0 18px rgba(77,246,255,.04); }
+.room-item-art img { display: block; width: 42px; height: 42px; object-fit: contain; filter: drop-shadow(0 0 7px rgba(77,246,255,.4)); }
 .room-item-copy { min-width: 0; }
 .room-item-copy h3 { margin: 0 0 3px; font-size: 14px; }
 .room-item-copy p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
@@ -464,6 +468,8 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
   .core-icon::after { inset: 10px; }
   .panel-shell, .wide-panel { max-height: calc(100vh - 20px); padding: 24px; }
   .panel-screen { padding: 10px; }
+  .meta-item { grid-template-columns: 1fr; gap: 12px; }
+  .meta-buy { width: 100%; }
   .hud-top-left { top: 12px; left: 12px; }
   .hud-top-right { top: 12px; right: 12px; gap: 8px; }
   .hud-top-right > div { display: none; }
@@ -490,7 +496,8 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
   .room-status { grid-template-columns: repeat(2, 1fr); }
   .room-grid { grid-template-columns: 1fr; }
   .room-item { grid-template-columns: 42px minmax(0, 1fr) auto; min-height: 78px; padding: 11px; gap: 9px; }
-  .room-item-code { width: 40px; height: 40px; }
+  .room-item-art { width: 40px; height: 40px; }
+  .room-item-art img { width: 36px; height: 36px; }
   .room-buy { min-width: 66px; padding-inline: 6px; }
 }
 

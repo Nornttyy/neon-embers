@@ -109,16 +109,16 @@ export const MISSION_STAGES = Object.freeze([
 ]);
 
 export const ROOM_ITEMS = Object.freeze([
-  Object.freeze({ id: "repair", code: "HP", name: "装甲修复包", description: "立即恢复 35 点生命。", cost: 18, amount: 35 }),
-  Object.freeze({ id: "ammo", code: "AM", name: "轨道弹匣", description: "立即补满轨道手枪弹药。", cost: 10 }),
-  Object.freeze({ id: "stamina", code: "ST", name: "动能电池", description: "立即补满格挡与闪避体力。", cost: 12 }),
-  Object.freeze({ id: "barrier", code: "SH", name: "应急护盾", description: "获得 40 点临时护盾，上限 80。", cost: 22, amount: 40 }),
+  Object.freeze({ id: "repair", asset: "assets/items/repair-kit.png", name: "装甲修复包", description: "立即恢复 35 点生命。", cost: 18, amount: 35 }),
+  Object.freeze({ id: "ammo", asset: "assets/items/ammo-cell.png", name: "轨道弹匣", description: "立即补满轨道手枪弹药。", cost: 10 }),
+  Object.freeze({ id: "stamina", asset: "assets/items/stamina-cell.png", name: "动能电池", description: "立即补满格挡与闪避体力。", cost: 12 }),
+  Object.freeze({ id: "barrier", asset: "assets/items/barrier-module.png", name: "应急护盾", description: "获得 40 点临时护盾，上限 80。", cost: 22, amount: 40 }),
 ]);
 
 export const META_UPGRADES = Object.freeze([
-  { id: "power", name: "初始校准", description: "单机与合作模式基础伤害 +4%", max: 5, baseCost: 45 },
-  { id: "armor", name: "备用装甲", description: "单机与合作模式初始生命 +8", max: 5, baseCost: 40 },
-  { id: "recovery", name: "回收协议", description: "核心能源结算 +6%", max: 5, baseCost: 55 },
+  { id: "power", asset: "assets/ui/power-upgrade.png", name: "初始校准", description: "单机与合作模式基础伤害 +4%", max: 5, baseCost: 45 },
+  { id: "armor", asset: "assets/ui/armor-upgrade.png", name: "备用装甲", description: "单机与合作模式初始生命 +8", max: 5, baseCost: 40 },
+  { id: "recovery", asset: "assets/ui/recovery-upgrade.png", name: "回收协议", description: "核心能源结算 +6%", max: 5, baseCost: 55 },
 ]);
 
 export function metaCost(definition, currentLevel) {

@@ -1,8 +1,8 @@
-import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=74bfda676dbb";
-import { audio } from "./audio.js?v=74bfda676dbb";
-import { adService } from "./ad-service.js?v=74bfda676dbb";
-import { Game } from "./game.js?v=74bfda676dbb";
-import { ASSET_REVISION, assetUrl } from "./revision.js?v=74bfda676dbb";
+import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=2933f99a7b8a";
+import { audio } from "./audio.js?v=2933f99a7b8a";
+import { adService } from "./ad-service.js?v=2933f99a7b8a";
+import { Game } from "./game.js?v=2933f99a7b8a";
+import { ASSET_REVISION, assetUrl } from "./revision.js?v=2933f99a7b8a";
 
 const SAVE_KEY = "neon-embers-save-v1";
 const SW_REFRESH_KEY = "neon-embers-sw-refresh";
@@ -161,11 +161,15 @@ function renderMeta() {
     const item = document.createElement("article");
     item.className = "meta-item";
     const info = document.createElement("div");
+    info.className = "meta-info";
     info.innerHTML = `
-      <h3>${definition.name}</h3>
-      <p>${definition.description}</p>
-      <div class="meta-level" aria-label="等级 ${level} / ${definition.max}">
-        ${Array.from({ length: definition.max }, (_, index) => `<i class="${index < level ? "on" : ""}"></i>`).join("")}
+      <img class="meta-art" src="${assetUrl(definition.asset)}" alt="" />
+      <div class="meta-copy">
+        <h3>${definition.name}</h3>
+        <p>${definition.description}</p>
+        <div class="meta-level" aria-label="等级 ${level} / ${definition.max}">
+          ${Array.from({ length: definition.max }, (_, index) => `<i class="${index < level ? "on" : ""}"></i>`).join("")}
+        </div>
       </div>
     `;
     const button = document.createElement("button");
@@ -238,7 +242,7 @@ function renderRoom(data) {
     const article = document.createElement("article");
     article.className = "room-item";
     article.innerHTML = `
-      <div class="room-item-code">${item.code}</div>
+      <div class="room-item-art"><img src="${assetUrl(item.asset)}" alt="" /></div>
       <div class="room-item-copy"><h3>${item.name}</h3><p>${item.description}</p><small>本次任务已购买 ${item.purchased}</small></div>
     `;
     const button = document.createElement("button");
