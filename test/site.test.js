@@ -11,14 +11,16 @@ const EFFECT_ART = [
   "attack-telegraph.png", "heavy-telegraph.png",
   "lancer-trail.png", "enemy-spawn.png", "blade-hit.png", "twin-hit.png", "hammer-hit.png", "rail-hit.png",
   "guard-hit.png", "barrier-hit.png", "enemy-destroy.png", "pickup-collect.png", "enemy-shield.png",
-  "dash-streak-hard.png", "boss-burst-hard.png", "energy-spark.png",
+  "dash-streak-hard.png", "boss-burst-hard.png", "energy-spark.png", "impact-shard.png",
+  "combo-finisher.png", "parry-counter.png", "skill-core.png", "dash-arrival.png", "execution-burst.png",
 ];
 const VFX_IMAGE_KEYS = [
   "guardField", "parryFlash", "guardBreak", "pulseWave", "overdriveAura", "barrierShell",
   "railRound", "enemyBolt", "bossBolt", "railMuzzle", "enemyMuzzle", "enemySwing",
   "attackTelegraph", "heavyTelegraph", "lancerTrail", "enemySpawn", "bladeHit", "twinHit",
   "hammerHit", "railHit", "guardHit", "barrierHit", "enemyDestroy", "pickupCollect",
-  "enemyShield", "dashStreak", "bossBurst", "energySpark",
+  "enemyShield", "dashStreak", "bossBurst", "energySpark", "impactShard",
+  "comboFinisher", "parryCounter", "skillCore", "dashArrival", "executionBurst",
 ];
 const UPGRADE_ART = ["power-upgrade.png", "armor-upgrade.png", "recovery-upgrade.png"];
 const RETIRED_EFFECT_ART = ["slash-arc.png", "bullet-impact.png", "block-shield.png", "dash-streak.png", "boss-burst.png"];
@@ -72,8 +74,8 @@ test("service worker caches every required application module and generated spri
     return [...block.matchAll(/^\s+(?:versioned\()?"[^"\n]+"\)?[,]?$/gm)];
   };
   assert.equal(shellEntries("CORE_SHELL").length, 17);
-  assert.equal(shellEntries("ASSET_SHELL").length, 69);
-  assert.equal(shellEntries("CORE_SHELL").length + shellEntries("ASSET_SHELL").length, 86, "bounded installation retains the complete offline manifest");
+  assert.equal(shellEntries("ASSET_SHELL").length, 75);
+  assert.equal(shellEntries("CORE_SHELL").length + shellEntries("ASSET_SHELL").length, 92, "bounded installation retains the complete offline manifest");
   assert.match(worker, /const PRECACHE_CONCURRENCY = 4/);
   const concurrencyBlock = worker.match(/async function cacheWithConcurrency[\s\S]*?\n\}/)?.[0] || "";
   assert.match(concurrencyBlock, /while \(nextIndex < paths\.length\)/);
@@ -115,10 +117,14 @@ test("asset loading decodes and prewarms every VFX image before becoming ready",
   assert.match(passBlock, /context\.globalAlpha = 0\.25/, "prewarm draws remain non-zero for GPU submission");
   assert.match(passBlock, /context\.globalCompositeOperation = composite/);
   assert.match(game, /const VFX_WARM_COLUMNS = 7/);
-  assert.match(game, /const VFX_WARM_ROWS = 4/);
+  assert.match(game, /const VFX_WARM_ROWS = 5/);
   assert.match(passBlock, /column = index % VFX_WARM_COLUMNS/);
   assert.match(passBlock, /row = Math\.floor\(index \/ VFX_WARM_COLUMNS\)/);
   assert.match(passBlock, /context\.drawImage\(image, x, y, width, height\)/);
+  assert.ok(
+    passBlock.indexOf("context.drawImage(image, x, y, width, height)") < passBlock.indexOf("warmedKeys.add(key)"),
+    "a VFX key is counted as warm only after its image was submitted through drawImage",
+  );
   assert.doesNotMatch(passBlock, /clearRect/, "grid images remain present until the Canvas submits the frame");
   assert.match(passBlock, /requestAnimationFrame\(drawGrid\)/, "each grid pass is drawn after the regular game frame");
   const sourcePassIndex = warmBlock.indexOf('await this.runVfxWarmPass("source-over", warmedKeys);');
@@ -210,7 +216,7 @@ test("retired paint-like effects are absent from source and production output", 
   }
 });
 
-test("0.9.4 keeps weapon, skill, wheel, and multi-source guard controls independent", async () => {
+test("0.9.5 keeps weapon, skill, wheel, and multi-source guard controls independent", async () => {
   const config = await readFile(new URL("../src/config.js", import.meta.url), "utf8");
   const game = await readFile(new URL("../src/game.js", import.meta.url), "utf8");
   const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
@@ -396,8 +402,12 @@ test("combat art uses endpoint-sampled dynamic weapon trails without static slas
   }
   const telegraphFrames = keyframeBlock[1].match(/telegraphPulse8\s*:\s*Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || "";
   const heavyFrames = keyframeBlock[1].match(/heavyPulse10\s*:\s*Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || "";
+  const impactFrames = keyframeBlock[1].match(/impactSnap10\s*:\s*Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || "";
+  const sparkFrames = keyframeBlock[1].match(/sparkFlight10\s*:\s*Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || "";
   assert.equal([...telegraphFrames.matchAll(/\bat\s*:/g)].length, 8);
   assert.equal([...heavyFrames.matchAll(/\bat\s*:/g)].length, 10);
+  assert.ok([...impactFrames.matchAll(/\bat\s*:/g)].length >= 10, "signature impact overlays use at least ten timed animation poses");
+  assert.ok([...sparkFrames.matchAll(/\bat\s*:/g)].length >= 10, "moving impact particles use at least ten timed animation poses");
   assert.match(game, /function sampleKeyframes\s*\(/);
   assert.match(game, /drawKeyframedSprite\s*\(/);
   const renderEnemy = game.match(/\n  renderEnemy\([\s\S]*?\n  renderPlayer\(/)?.[0] || "";
@@ -414,6 +424,37 @@ test("combat art uses endpoint-sampled dynamic weapon trails without static slas
   for (const asset of UPGRADE_ART) assert.match(config, new RegExp(asset.replaceAll(".", "\\.")));
   assert.match(main, /meta-(?:item-)?art/);
   assert.match(main, /assetUrl\(definition\.asset\)/);
+
+  assert.match(game, /const MAX_ACTIVE_SPARKS = 48/);
+  const updatePlayerBlock = game.match(/\n  updatePlayer\(dt\) \{([\s\S]*?)\n  \}\n\n  startAttack\(/)?.[1] || "";
+  assert.match(updatePlayerBlock, /dashArrived = true[\s\S]*?type: "dashArrival"/, "finishing a real dash emits its arrival material");
+  const damageEnemyBlock = game.match(/\n  damageEnemy\(enemy,[\s\S]*?\n  \}\n\n  killEnemy\(/)?.[0] || "";
+  assert.match(damageEnemyBlock, /this\.player\.attackIndex === 2/);
+  assert.match(damageEnemyBlock, /comboFinisher,/);
+  assert.match(damageEnemyBlock, /this\.spawnBurst\([\s\S]*?direction,[\s\S]*?\)/, "weapon-contact direction feeds the moving impact particles");
+  const damagePlayerBlock = game.match(/\n  damagePlayer\(amount,[\s\S]*?\n  \}\n\n  applyHealthDamage\(/)?.[0] || "";
+  assert.match(damagePlayerBlock, /type: "parryFlash"[\s\S]*?counter: true/);
+  const killEnemyBlock = game.match(/\n  killEnemy\(enemy,[\s\S]*?\n  \}\n\n  damagePlayer\(/)?.[0] || "";
+  assert.match(killEnemyBlock, /type: "enemyDestroy"[\s\S]*?finisher,/);
+  const spawnBurstBlock = game.match(/\n  spawnBurst\(x,[\s\S]*?\n  \}\n\n  finish\(/)?.[0] || "";
+  assert.match(spawnBurstBlock, /effect\.type === "energySpark" \|\| effect\.type === "impactShard"/);
+  assert.match(spawnBurstBlock, /MAX_ACTIVE_SPARKS - activeSparks/);
+  assert.match(spawnBurstBlock, /const directedAngle = direction/);
+  assert.match(spawnBurstBlock, /const shard = index % 2 === 1/);
+  assert.match(spawnBurstBlock, /type: shard \? "impactShard" : "energySpark"/);
+  for (const field of ["particle: true", "vx:", "vy:", "drag:", "spin:"]) assert.match(spawnBurstBlock, new RegExp(field));
+  const updateEffectsBlock = game.match(/\n  updateEffects\(dt\) \{([\s\S]*?)\n  \}\n\n  spawnBurst\(/)?.[1] || "";
+  assert.match(updateEffectsBlock, /effect\.x \+= effect\.vx \* dt/);
+  assert.match(updateEffectsBlock, /effect\.y \+= effect\.vy \* dt/);
+  assert.match(updateEffectsBlock, /Math\.exp\(-dt \* effect\.drag\)/);
+  assert.match(updateEffectsBlock, /effect\.angle \+= effect\.spin \* dt/);
+  const effectRenderBlock = game.match(/\n  renderEffects\(ctx, behind\) \{([\s\S]*?)\n  \}\n\n  drawKeyframedSprite\(/)?.[1] || "";
+  for (const key of ["comboFinisher", "parryCounter", "skillCore", "dashArrival", "executionBurst"]) {
+    assert.match(effectRenderBlock, new RegExp(`"${key}"[\\s\\S]*?animation: "impactSnap10"`), `${key} is rendered through the ten-pose impact animation`);
+  }
+  assert.match(effectRenderBlock, /\["energySpark", "impactShard"\]\.includes\(effect\.type\)/);
+  assert.match(effectRenderBlock, /animation: "sparkFlight10"/);
+  assert.match(effectRenderBlock, /drawKeyframedSprite\(ctx, effect\.type, effect, effect\.radius/);
 });
 
 test("runtime hit, dash, and skill rendering uses full-resolution prefiltered sprite caches", async () => {
@@ -567,7 +608,7 @@ test("HTML exposes manifest and install metadata", async () => {
   assert.match(html, /id="room-screen"/);
   assert.match(html, /id="room-grid"/);
   assert.match(html, /id="room-start-button"/);
-  assert.match(html, /STAGE MISSION \/\/ 0\.9\.4/);
+  assert.match(html, /STAGE MISSION \/\/ 0\.9\.5/);
   assert.doesNotMatch(html, /id="upgrade-screen"/);
   assert.doesNotMatch(html, /动作肉鸽/);
 });

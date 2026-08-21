@@ -6,12 +6,13 @@ const TAU = Math.PI * 2;
 const MAX_ASSET_LOAD_ATTEMPTS = 3;
 const ASSET_RETRY_DELAY = 140;
 const VFX_WARM_COLUMNS = 7;
-const VFX_WARM_ROWS = 4;
+const VFX_WARM_ROWS = 5;
 const VFX_WARM_CELL_SIZE = 96;
 const ARENA_CACHE_PADDING = 160;
 const WEAPON_TIP_TRAIL_CAPACITY = 11;
 const WEAPON_TIP_TRAIL_SAMPLE_INTERVAL = 1 / 90;
 const WEAPON_TIP_TRAIL_LIFETIME = 0.17;
+const MAX_ACTIVE_SPARKS = 48;
 const WEAPON_TIP_TRAIL_HANDS = Object.freeze(["primary", "offhand"]);
 const WEAPON_SLOT_MELEE = 1;
 const WEAPON_SLOT_RANGED = 2;
@@ -58,6 +59,12 @@ const VFX_IMAGE_KEYS = Object.freeze([
   "dashStreak",
   "bossBurst",
   "energySpark",
+  "impactShard",
+  "comboFinisher",
+  "parryCounter",
+  "skillCore",
+  "dashArrival",
+  "executionBurst",
 ]);
 const PLAYER_SPRITES = Object.freeze({
   hunter: "playerHunter",
@@ -155,6 +162,30 @@ const VFX_KEYFRAMES = Object.freeze({
     { at: 0.78, scale: 1.03, alpha: 0.82, rotation: 0.04 },
     { at: 0.89, scale: 1.02, alpha: 0.7, rotation: 0.052 },
     { at: 1, scale: 1.06, alpha: 1, rotation: 0.064 },
+  ]),
+  impactSnap10: Object.freeze([
+    { at: 0, scale: 0.16, alpha: 0, rotation: -0.1 },
+    { at: 0.06, scale: 0.5, alpha: 0.76, rotation: -0.072 },
+    { at: 0.13, scale: 0.92, alpha: 1, rotation: -0.042 },
+    { at: 0.22, scale: 1.14, alpha: 1, rotation: -0.012 },
+    { at: 0.34, scale: 1.03, alpha: 0.88, rotation: 0.014 },
+    { at: 0.47, scale: 1.12, alpha: 0.72, rotation: 0.034 },
+    { at: 0.61, scale: 1.18, alpha: 0.56, rotation: 0.05 },
+    { at: 0.74, scale: 1.22, alpha: 0.38, rotation: 0.064 },
+    { at: 0.88, scale: 1.25, alpha: 0.18, rotation: 0.076 },
+    { at: 1, scale: 1.28, alpha: 0, rotation: 0.085 },
+  ]),
+  sparkFlight10: Object.freeze([
+    { at: 0, scale: 0.32, alpha: 0, rotation: -0.06 },
+    { at: 0.05, scale: 0.8, alpha: 0.9, rotation: -0.04 },
+    { at: 0.12, scale: 1, alpha: 1, rotation: -0.018 },
+    { at: 0.24, scale: 0.95, alpha: 0.94, rotation: 0.006 },
+    { at: 0.38, scale: 0.84, alpha: 0.82, rotation: 0.03 },
+    { at: 0.53, scale: 0.72, alpha: 0.68, rotation: 0.052 },
+    { at: 0.68, scale: 0.6, alpha: 0.52, rotation: 0.072 },
+    { at: 0.82, scale: 0.48, alpha: 0.35, rotation: 0.09 },
+    { at: 0.92, scale: 0.36, alpha: 0.18, rotation: 0.104 },
+    { at: 1, scale: 0.24, alpha: 0, rotation: 0.114 },
   ]),
 });
 const formatTime = (seconds) => {
@@ -263,6 +294,12 @@ export class Game {
       dashStreak: "assets/effects/dash-streak-hard.png",
       bossBurst: "assets/effects/boss-burst-hard.png",
       energySpark: "assets/effects/energy-spark.png",
+      impactShard: "assets/effects/impact-shard.png",
+      comboFinisher: "assets/effects/combo-finisher.png",
+      parryCounter: "assets/effects/parry-counter.png",
+      skillCore: "assets/effects/skill-core.png",
+      dashArrival: "assets/effects/dash-arrival.png",
+      executionBurst: "assets/effects/execution-burst.png",
       blade: WEAPONS.blade.asset,
       twin: WEAPONS.twin.asset,
       hammer: WEAPONS.hammer.asset,
@@ -846,13 +883,13 @@ export class Game {
           this.damageEnemy(enemy, 58 * player.stats.meleeDamage, "skill", direction, 300);
         }
       }
-      this.effects.push({ type: "pulseWave", x: player.x, y: player.y, angle: player.facing, radius: 390, life: 0.46, maxLife: 0.46, color: "#4df6ff" });
+      this.effects.push({ type: "pulseWave", x: player.x, y: player.y, angle: player.facing, radius: 390, life: 0.46, maxLife: 0.46, color: "#4df6ff", skillCore: true });
     } else if (skillId === "overdrive") {
       player.overdrive = 5;
-      this.effects.push({ type: "overdriveAura", x: player.x, y: player.y, angle: player.facing, radius: 148, life: 0.5, maxLife: 0.5, color: "#b77dff" });
+      this.effects.push({ type: "overdriveAura", x: player.x, y: player.y, angle: player.facing, radius: 148, life: 0.5, maxLife: 0.5, color: "#b77dff", skillCore: true });
     } else if (skillId === "barrier") {
       player.barrier = Math.max(player.barrier, 55);
-      this.effects.push({ type: "barrierShell", x: player.x, y: player.y, angle: player.facing, radius: 126, life: 0.54, maxLife: 0.54, color: "#ffcc66" });
+      this.effects.push({ type: "barrierShell", x: player.x, y: player.y, angle: player.facing, radius: 126, life: 0.54, maxLife: 0.54, color: "#ffcc66", skillCore: true });
     }
     audio.skill(skillId);
     this.spawnBurst(player.x, player.y, this.run.core.color, 22, 210);
@@ -1227,12 +1264,16 @@ export class Game {
     }
 
     let direction = move;
+    let dashArrived = false;
     let speed = GAME.playerSpeed * player.stats.speed * (player.overdrive > 0 ? 1.16 : 1);
     if (player.action === "dash") {
       player.dashTime -= dt;
       direction = player.dashVector;
       speed = GAME.dashSpeed;
-      if (player.dashTime <= 0) player.action = "idle";
+      if (player.dashTime <= 0) {
+        player.action = "idle";
+        dashArrived = true;
+      }
     } else if (player.action === "block") {
       speed *= 0.44;
     } else if (player.action === "attack") {
@@ -1244,6 +1285,13 @@ export class Game {
     if (player.action !== "dash" && player.action !== "block" && this.pointer.active && player.action !== "attack") this.faceThreat();
     player.x = clamp(player.x + direction.x * speed * dt, 42, GAME.width - 42);
     player.y = clamp(player.y + direction.y * speed * dt, 42, GAME.height - 42);
+    if (dashArrived) {
+      this.effects.push({
+        type: "dashArrival", x: player.x, y: player.y,
+        angle: Math.atan2(player.dashVector.y, player.dashVector.x),
+        radius: 118, life: 0.24, maxLife: 0.24, color: this.run.core.color,
+      });
+    }
 
     if (player.staminaDelay <= 0 && player.action !== "block") {
       player.stamina = Math.min(player.maxStamina, player.stamina + 31 * player.stats.staminaRegen * dt);
@@ -1669,7 +1717,8 @@ export class Game {
     if (!enemy || enemy.dead) return;
     enemy.hp -= amount;
     const meleeImpact = kind === "melee";
-    const heavyImpact = meleeImpact && (this.player.attackIndex === 2 || enemy.elite || enemy.boss);
+    const comboFinisher = meleeImpact && this.player.attackIndex === 2;
+    const heavyImpact = meleeImpact && (comboFinisher || enemy.elite || enemy.boss);
     enemy.hitFlash = heavyImpact ? 1.35 : 1;
     if (direction && knockback) {
       enemy.pushX += direction.x * knockback;
@@ -1692,19 +1741,31 @@ export class Game {
         maxLife: heavyImpact ? 0.28 : meleeImpact ? 0.23 : 0.16,
         color: kind === "rail" ? "#b77dff" : this.run.core.color,
         heavy: heavyImpact,
+        comboFinisher,
       });
     }
-    this.spawnBurst(enemy.x, enemy.y, kind === "rail" ? "#b77dff" : "#4df6ff", enemy.boss ? 14 : heavyImpact ? 10 : meleeImpact ? 7 : 4, heavyImpact ? 175 : meleeImpact ? 145 : 110);
+    this.spawnBurst(
+      enemy.x,
+      enemy.y,
+      kind === "rail" ? "#b77dff" : "#4df6ff",
+      enemy.boss ? 14 : heavyImpact ? 10 : meleeImpact ? 7 : 4,
+      heavyImpact ? 175 : meleeImpact ? 145 : 110,
+      direction,
+    );
     this.shake = Math.max(this.shake, heavyImpact ? 7 : meleeImpact ? 5 : 2.5);
     const weaponKind = kind === "melee" ? this.run.core.weapon : kind;
     audio.hit(weaponKind, {
       heavy: heavyImpact,
       killed: enemy.hp <= 0,
     });
-    if (enemy.hp <= 0) this.killEnemy(enemy);
+    if (enemy.hp <= 0) {
+      this.killEnemy(enemy, {
+        finisher: !enemy.boss && (comboFinisher || kind === "skill" || kind === "reflect"),
+      });
+    }
   }
 
-  killEnemy(enemy) {
+  killEnemy(enemy, { finisher = false } = {}) {
     if (enemy.dead) return;
     enemy.dead = true;
     this.run.kills += 1;
@@ -1725,6 +1786,7 @@ export class Game {
       type: "enemyDestroy", x: enemy.x, y: enemy.y, angle: enemy.rotation,
       radius: enemy.boss ? 310 : enemy.elite ? 176 : enemy.radius * 5.2,
       life: enemy.boss ? 0.82 : 0.48, maxLife: enemy.boss ? 0.82 : 0.48, color: enemy.color,
+      finisher,
     });
     this.spawnBurst(enemy.x, enemy.y, enemy.color, enemy.boss ? 48 : 14, enemy.boss ? 300 : 180);
     if (enemy.boss) {
@@ -1747,7 +1809,13 @@ export class Game {
           source.pushY -= towardSource.y * 240;
         }
         player.stamina = Math.min(player.maxStamina, player.stamina + 10);
-        this.effects.push({ type: "parryFlash", x: player.x, y: player.y, angle: player.facing, radius: 150, life: 0.34, maxLife: 0.34, color: "#ffffff" });
+        const parryEffect = {
+          type: "parryFlash", x: player.x, y: player.y, angle: player.facing,
+          radius: 150, life: 0.34, maxLife: 0.34, color: "#ffffff", counter: true,
+        };
+        const activeParry = this.effects.find((effect) => effect.type === "parryFlash" && effect.life > 0);
+        if (activeParry) Object.assign(activeParry, parryEffect);
+        else this.effects.push(parryEffect);
         this.callbacks.onAnnouncement?.({ title: "精准招架", subtitle: "攻击者已失衡" });
         audio.guard(true);
         return "parry";
@@ -1856,7 +1924,17 @@ export class Game {
       particle.vy *= Math.exp(-dt * 3.2);
     }
     this.particles = this.particles.filter((particle) => particle.life > 0);
-    for (const effect of this.effects) effect.life -= dt;
+    for (const effect of this.effects) {
+      effect.life -= dt;
+      if (effect.particle) {
+        effect.x += effect.vx * dt;
+        effect.y += effect.vy * dt;
+        const damping = Math.exp(-dt * effect.drag);
+        effect.vx *= damping;
+        effect.vy *= damping;
+        effect.angle += effect.spin * dt;
+      }
+    }
     this.effects = this.effects.filter((effect) => effect.life > 0);
     for (const text of this.damageTexts) {
       text.life -= dt;
@@ -1865,21 +1943,34 @@ export class Game {
     this.damageTexts = this.damageTexts.filter((text) => text.life > 0);
   }
 
-  spawnBurst(x, y, color, count = 8, speed = 140) {
-    const spriteCount = clamp(Math.ceil(count / 5), 1, 8);
+  spawnBurst(x, y, color, count = 8, speed = 140, direction = null) {
+    const activeSparks = this.effects.reduce(
+      (total, effect) => total + (effect.type === "energySpark" || effect.type === "impactShard" ? 1 : 0),
+      0,
+    );
+    const spriteCount = Math.min(clamp(Math.ceil(count / 3), 1, 8), Math.max(0, MAX_ACTIVE_SPARKS - activeSparks));
+    const directedAngle = direction && (direction.x || direction.y) ? Math.atan2(direction.y, direction.x) : null;
     for (let index = 0; index < spriteCount; index += 1) {
-      const angle = Math.random() * TAU;
+      const angle = directedAngle == null ? Math.random() * TAU : directedAngle + randomBetween(-1.12, 1.12);
       const travel = randomBetween(2, Math.max(3, speed * 0.035));
-      const life = randomBetween(0.24, 0.42);
+      const velocity = randomBetween(speed * 0.48, speed);
+      const life = randomBetween(0.28, 0.48);
+      const shard = index % 2 === 1;
       this.effects.push({
-        type: "energySpark",
+        type: shard ? "impactShard" : "energySpark",
         x: x + Math.cos(angle) * travel,
         y: y + Math.sin(angle) * travel,
         angle,
-        radius: randomBetween(34, 58),
+        radius: shard ? randomBetween(44, 66) : randomBetween(28, 46),
         life,
         maxLife: life,
         color,
+        particle: true,
+        vx: Math.cos(angle) * velocity,
+        vy: Math.sin(angle) * velocity,
+        drag: randomBetween(4.2, 6.4),
+        spin: randomBetween(-5.2, 5.2),
+        flipY: Math.random() > 0.5,
       });
     }
   }
@@ -2631,7 +2722,7 @@ export class Game {
   renderEffects(ctx, behind) {
     for (const effect of this.effects) {
       const drawsBehind = [
-        "dashStreak", "bossBurst", "enemySpawn", "lancerTrail",
+        "dashStreak", "dashArrival", "bossBurst", "enemySpawn", "lancerTrail",
         "pulseWave", "overdriveAura", "barrierShell",
       ].includes(effect.type);
       if (drawsBehind !== behind) continue;
@@ -2640,6 +2731,12 @@ export class Game {
           animation: "burst",
           alpha: 0.82,
           offset: -54,
+        });
+      } else if (effect.type === "dashArrival") {
+        this.drawKeyframedSprite(ctx, "dashArrival", effect, effect.radius, {
+          animation: "impactSnap10",
+          alpha: 0.88,
+          composite: "screen",
         });
       } else if (effect.type === "bossBurst") {
         this.drawKeyframedSprite(ctx, "bossBurst", effect, effect.radius, {
@@ -2651,10 +2748,13 @@ export class Game {
       } else if (effect.type === "lancerTrail") {
         this.drawKeyframedSprite(ctx, "lancerTrail", effect, effect.radius, { animation: "burst", alpha: 0.76, offset: -34 });
       } else if (effect.type === "pulseWave") {
+        if (effect.skillCore) this.drawKeyframedSprite(ctx, "skillCore", effect, 152, { animation: "impactSnap10", alpha: 0.88 });
         this.drawKeyframedSprite(ctx, "pulseWave", effect, effect.radius, { animation: "pulse", alpha: 0.72, composite: "screen" });
       } else if (effect.type === "overdriveAura") {
+        if (effect.skillCore) this.drawKeyframedSprite(ctx, "skillCore", effect, 144, { animation: "impactSnap10", alpha: 0.84 });
         this.drawKeyframedSprite(ctx, "overdriveAura", effect, effect.radius, { animation: "pulse", alpha: 0.82 });
       } else if (effect.type === "barrierShell") {
+        if (effect.skillCore) this.drawKeyframedSprite(ctx, "skillCore", effect, 138, { animation: "impactSnap10", alpha: 0.84 });
         this.drawKeyframedSprite(ctx, "barrierShell", effect, effect.radius, { animation: "pulse", alpha: 0.84 });
       } else if (["railMuzzle", "enemyMuzzle"].includes(effect.type)) {
         this.drawKeyframedSprite(ctx, effect.type, effect, effect.radius, { animation: "burst", alpha: 0.94 });
@@ -2666,14 +2766,45 @@ export class Game {
           alpha: 0.96,
           rotation: effect.type === "railHit" ? effect.angle + Math.PI : effect.angle,
         });
+        if (effect.comboFinisher) {
+          this.drawKeyframedSprite(ctx, "comboFinisher", effect, effect.radius * 1.48, {
+            animation: "impactSnap10",
+            alpha: 0.82,
+            composite: "screen",
+          });
+        }
       } else if (effect.type === "guardHit") {
         this.drawKeyframedSprite(ctx, "guardHit", effect, effect.radius, { animation: "burst", alpha: 0.96, offset: 34 });
       } else if (effect.type === "parryFlash") {
         this.drawKeyframedSprite(ctx, "parryFlash", effect, effect.radius, { animation: "burst", alpha: 0.98, offset: 26 });
-      } else if (["guardBreak", "barrierHit", "enemyDestroy", "pickupCollect", "energySpark"].includes(effect.type)) {
+        if (effect.counter) {
+          this.drawKeyframedSprite(ctx, "parryCounter", effect, effect.radius * 1.32, {
+            animation: "impactSnap10",
+            alpha: 0.86,
+            offset: 38,
+            composite: "screen",
+          });
+        }
+      } else if (effect.type === "enemyDestroy") {
+        this.drawKeyframedSprite(ctx, "enemyDestroy", effect, effect.radius, { animation: "burst", alpha: 0.94 });
+        if (effect.finisher) {
+          this.drawKeyframedSprite(ctx, "executionBurst", effect, effect.radius * 1.24, {
+            animation: "impactSnap10",
+            alpha: 0.82,
+            composite: "screen",
+          });
+        }
+      } else if (["energySpark", "impactShard"].includes(effect.type)) {
+        this.drawKeyframedSprite(ctx, effect.type, effect, effect.radius, {
+          animation: "sparkFlight10",
+          alpha: effect.type === "impactShard" ? 0.9 : 0.82,
+          flipY: effect.flipY,
+          composite: "screen",
+        });
+      } else if (["guardBreak", "barrierHit", "pickupCollect"].includes(effect.type)) {
         this.drawKeyframedSprite(ctx, effect.type, effect, effect.radius, {
           animation: effect.type === "pickupCollect" ? "pulse" : "burst",
-          alpha: effect.type === "energySpark" ? 0.78 : 0.94,
+          alpha: 0.94,
           offset: effect.type === "barrierHit" ? 24 : 0,
         });
       }

@@ -17,7 +17,9 @@ const requiredMaterialPaths = [
   "assets/effects/twin-hit.png", "assets/effects/hammer-hit.png", "assets/effects/rail-hit.png",
   "assets/effects/guard-hit.png", "assets/effects/barrier-hit.png", "assets/effects/enemy-destroy.png",
   "assets/effects/pickup-collect.png", "assets/effects/enemy-shield.png", "assets/effects/dash-streak-hard.png",
-  "assets/effects/boss-burst-hard.png", "assets/effects/energy-spark.png",
+  "assets/effects/boss-burst-hard.png", "assets/effects/energy-spark.png", "assets/effects/impact-shard.png",
+  "assets/effects/combo-finisher.png", "assets/effects/parry-counter.png", "assets/effects/skill-core.png",
+  "assets/effects/dash-arrival.png", "assets/effects/execution-burst.png",
   "assets/items/repair-kit.png", "assets/items/ammo-cell.png", "assets/items/stamina-cell.png", "assets/items/barrier-module.png",
   "assets/enemies/skitter-drone.png", "assets/enemies/lancer-drone.png",
   "assets/world/room-floor.png", "assets/world/outer-floor.png", "assets/world/blockade-floor.png",
@@ -376,6 +378,9 @@ try {
       const required = [
         'assets/effects/guard-field.png', 'assets/effects/attack-telegraph.png',
         'assets/effects/heavy-telegraph.png', 'assets/effects/rail-round.png',
+        'assets/effects/impact-shard.png', 'assets/effects/combo-finisher.png',
+        'assets/effects/parry-counter.png', 'assets/effects/skill-core.png',
+        'assets/effects/dash-arrival.png', 'assets/effects/execution-burst.png',
         'assets/enemies/skitter-drone.png', 'assets/items/barrier-module.png',
         'assets/ui/power-upgrade.png', 'assets/world/room-floor.png'
       ];
@@ -492,6 +497,7 @@ try {
       assetPreloadReady: game?.assetLoadState.ready
         && game.assetLoadState.loaded === game.assetLoadState.total
         && game.assetLoadState.failed.length === 0,
+      assetImageTotal: game?.assetLoadState.total,
       vfxWarmState: {
         ready: game?.vfxWarmState.ready,
         warmed: game?.vfxWarmState.warmed,
@@ -542,8 +548,9 @@ try {
   assert.equal(initial.retiredSlashAbsent, true);
   assert.equal(initial.dynamicMaterialSampler, true);
   assert.equal(initial.assetPreloadReady, true);
+  assert.equal(initial.assetImageTotal, 58);
   assert.equal(initial.vfxWarmState.ready, true);
-  assert.equal(initial.vfxWarmState.total, 28);
+  assert.equal(initial.vfxWarmState.total, 34);
   assert.equal(initial.vfxWarmState.warmed, initial.vfxWarmState.total);
   assert.equal(initial.vfxWarmState.failed, 0);
   assert.deepEqual(initial.filteredSpriteState, {
@@ -1224,6 +1231,127 @@ try {
     noSlashImage: true,
   });
 
+  const signatureImpactMaterials = await evaluate(`(() => {
+    const game = window.__NEON_DEBUG__.game;
+    const previous = {
+      enemies: game.enemies,
+      effects: game.effects,
+      pickups: game.pickups,
+      damageTexts: game.damageTexts,
+      kills: game.run.kills,
+      defeated: game.run.stageDefeated,
+      attackIndex: game.player.attackIndex,
+    };
+    game.enemies = [];
+    game.effects = [];
+    game.pickups = [];
+    game.damageTexts = [];
+    const drawnKeys = [];
+    const drawnPaths = [];
+    const originalDrawImage = game.ctx.drawImage;
+    game.ctx.drawImage = function(image, ...args) {
+      for (const key of ['comboFinisher', 'executionBurst']) {
+        if (image === game.images[key]) drawnKeys.push(key);
+      }
+      if (image?.src) drawnPaths.push(new URL(image.src).pathname);
+      return originalDrawImage.call(this, image, ...args);
+    };
+    try {
+      const enemy = game.spawnEnemy('chaser', false, { x: game.player.x + 90, y: game.player.y });
+      enemy.hp = 1;
+      game.player.attackIndex = 2;
+      game.damageEnemy(enemy, 10, 'melee', { x: 1, y: 0 }, 0);
+      const comboEvent = game.effects.some((effect) => /Hit$/.test(effect.type) && effect.comboFinisher === true);
+      const executionEvent = game.effects.some((effect) => effect.type === 'enemyDestroy' && effect.finisher === true);
+      game.renderEffects(game.ctx, false);
+      return {
+        comboEvent,
+        executionEvent,
+        comboDrawImage: drawnKeys.includes('comboFinisher')
+          && drawnPaths.some((path) => path.endsWith('/assets/effects/combo-finisher.png')),
+        executionDrawImage: drawnKeys.includes('executionBurst')
+          && drawnPaths.some((path) => path.endsWith('/assets/effects/execution-burst.png')),
+        noGenericSlash: drawnPaths.every((path) => !path.endsWith('/assets/effects/slash-arc.png')),
+      };
+    } finally {
+      game.ctx.drawImage = originalDrawImage;
+      game.enemies = previous.enemies;
+      game.effects = previous.effects;
+      game.pickups = previous.pickups;
+      game.damageTexts = previous.damageTexts;
+      game.run.kills = previous.kills;
+      game.run.stageDefeated = previous.defeated;
+      game.player.attackIndex = previous.attackIndex;
+    }
+  })()`);
+  assert.deepEqual(signatureImpactMaterials, {
+    comboEvent: true,
+    executionEvent: true,
+    comboDrawImage: true,
+    executionDrawImage: true,
+    noGenericSlash: true,
+  });
+
+  const movingImpactParticles = await evaluate(`(() => {
+    const game = window.__NEON_DEBUG__.game;
+    const previousEffects = game.effects;
+    const previousParticles = game.particles;
+    const previousDamageTexts = game.damageTexts;
+    game.effects = [];
+    game.particles = [];
+    game.damageTexts = [];
+    const drawnKeys = [];
+    const originalDrawImage = game.ctx.drawImage;
+    game.ctx.drawImage = function(image, ...args) {
+      for (const key of ['energySpark', 'impactShard']) {
+        if (image === game.images[key]) drawnKeys.push(key);
+      }
+      return originalDrawImage.call(this, image, ...args);
+    };
+    try {
+      for (let index = 0; index < 7; index += 1) game.spawnBurst(400, 400, '#4df6ff', 24, 200, { x: 1, y: 0 });
+      const sparks = game.effects.filter((effect) => effect.type === 'energySpark' || effect.type === 'impactShard');
+      const before = sparks.map((effect) => ({ x: effect.x, y: effect.y, vx: effect.vx, vy: effect.vy, angle: effect.angle }));
+      const fieldsValid = sparks.every((effect) => effect.particle === true
+        && Number.isFinite(effect.vx) && Number.isFinite(effect.vy)
+        && effect.drag > 0 && Number.isFinite(effect.spin));
+      const directedForward = sparks.every((effect) => effect.vx > 0);
+      game.updateEffects(0.05);
+      const moved = sparks.every((effect, index) => Math.hypot(effect.x - before[index].x, effect.y - before[index].y) > 0.01);
+      const damped = sparks.every((effect, index) => Math.hypot(effect.vx, effect.vy) < Math.hypot(before[index].vx, before[index].vy));
+      const spun = sparks.some((effect, index) => Math.abs(effect.angle - before[index].angle) > 0.0001);
+      game.renderEffects(game.ctx, false);
+      return {
+        capped: sparks.length === 48,
+        alternatingTypes: sparks.some((effect) => effect.type === 'energySpark')
+          && sparks.some((effect) => effect.type === 'impactShard'),
+        fieldsValid,
+        directedForward,
+        moved,
+        damped,
+        spun,
+        energyDrawImage: drawnKeys.includes('energySpark'),
+        shardDrawImage: drawnKeys.includes('impactShard'),
+      };
+    } finally {
+      game.ctx.drawImage = originalDrawImage;
+      game.effects = previousEffects;
+      game.particles = previousParticles;
+      game.damageTexts = previousDamageTexts;
+    }
+  })()`);
+  assert.deepEqual(movingImpactParticles, {
+    capped: true,
+    alternatingTypes: true,
+    fieldsValid: true,
+    directedForward: true,
+    moved: true,
+    damped: true,
+    spun: true,
+    energyDrawImage: true,
+    shardDrawImage: true,
+  });
+
   await delay(420);
   await evaluate("window.__NEON_DEBUG__.game.requestRanged()");
   await delay(20);
@@ -1251,6 +1379,7 @@ try {
 
   const parry = await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
+    game.effects = [];
     game.player.action = 'idle';
     game.pointer.active = false;
     game.setBlocking(true);
@@ -1258,15 +1387,28 @@ try {
     const attacker = { x: game.player.x + 30, y: game.player.y, stun: 0, pushX: 0, pushY: 0 };
     const health = game.player.health;
     const result = game.damagePlayer(20, attacker, 1);
+    const counterEvent = game.effects.some((effect) => effect.type === 'parryFlash' && effect.counter === true);
+    const drawn = [];
+    const original = game.ctx.drawImage;
+    game.ctx.drawImage = function(image, ...args) {
+      if (image === game.images.parryCounter) drawn.push(new URL(image.src).pathname);
+      return original.call(this, image, ...args);
+    };
+    try { game.renderEffects(game.ctx, false); } finally { game.ctx.drawImage = original; }
     game.setBlocking(false);
     return {
       result,
       healthUnchanged: game.player.health === health,
       stunned: attacker.stun > 0,
-      material: game.effects.some((effect) => /parry/i.test(effect.type))
+      material: game.effects.some((effect) => /parry/i.test(effect.type)),
+      counterEvent,
+      counterDrawImage: drawn.some((path) => path.endsWith('/assets/effects/parry-counter.png')),
     };
   })()`);
-  assert.deepEqual(parry, { result: "parry", healthUnchanged: true, stunned: true, material: true });
+  assert.deepEqual(parry, {
+    result: "parry", healthUnchanged: true, stunned: true, material: true,
+    counterEvent: true, counterDrawImage: true,
+  });
 
   const heldDefense = await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
@@ -1338,10 +1480,13 @@ try {
 
   const generatedDash = await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
+    game.effects = [];
     game.player.action = 'idle';
     game.player.stamina = game.player.maxStamina;
     game.player.dashCooldown = 0;
     game.requestDash();
+    game.updatePlayer(0.016);
+    game.player.dashTime = 0.001;
     game.updatePlayer(0.016);
     const drawn = [];
     const original = game.ctx.drawImage;
@@ -1350,13 +1495,20 @@ try {
       return original.call(this, image, ...args);
     };
     try { game.renderEffects(game.ctx, true); } finally { game.ctx.drawImage = original; }
-    return game.effects.some((effect) => /dash/i.test(effect.type))
-      && drawn.some((path) => path.endsWith('/assets/effects/dash-streak-hard.png'));
+    return {
+      streakEvent: game.effects.some((effect) => effect.type === 'dashStreak'),
+      arrivalEvent: game.effects.some((effect) => effect.type === 'dashArrival'),
+      streakDrawImage: drawn.some((path) => path.endsWith('/assets/effects/dash-streak-hard.png')),
+      arrivalDrawImage: drawn.some((path) => path.endsWith('/assets/effects/dash-arrival.png')),
+    };
   })()`);
-  assert.equal(generatedDash, true);
+  assert.deepEqual(generatedDash, {
+    streakEvent: true, arrivalEvent: true, streakDrawImage: true, arrivalDrawImage: true,
+  });
 
   const generatedSkill = await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
+    game.effects = [];
     game.player.action = 'idle';
     game.player.skillCooldowns[game.player.activeSkillSlot - 1] = 0;
     game.requestSkill();
@@ -1372,10 +1524,13 @@ try {
     } finally {
       game.ctx.drawImage = original;
     }
-    return game.effects.some((effect) => /pulse|skill/i.test(effect.type))
-      && drawn.some((path) => path.endsWith('/assets/effects/pulse-wave.png'));
+    return {
+      skillEvent: game.effects.some((effect) => /pulse|skill/i.test(effect.type)),
+      pulseDrawImage: drawn.some((path) => path.endsWith('/assets/effects/pulse-wave.png')),
+      coreDrawImage: drawn.some((path) => path.endsWith('/assets/effects/skill-core.png')),
+    };
   })()`);
-  assert.equal(generatedSkill, true);
+  assert.deepEqual(generatedSkill, { skillEvent: true, pulseDrawImage: true, coreDrawImage: true });
 
   if (process.env.NEON_SMOKE_BATTLE_SHOT) {
     await evaluate(`(() => {
@@ -1650,7 +1805,7 @@ try {
   })()`);
   assert.deepEqual(upgradeCards, { count: 3, ready: true, versioned: true, correctArt: true });
   assert.deepEqual(exceptions, []);
-  console.log("Browser smoke passed: 1/2 and debounced-wheel weapon switching, R/Q expandable skill slots, multi-source guard recovery, current-weapon attacks, loading gates, full-DPR arena cache, filtered sprites, 28/28 VFX prewarm, endpoint blade trails, real weapon contact and mission flows are functional.");
+  console.log("Browser smoke passed: 1/2 and debounced-wheel weapon switching, R/Q expandable skill slots, multi-source guard recovery, current-weapon attacks, 34/34 VFX prewarm, six event-linked impact materials, capped moving spark/shard particles, endpoint blade trails, and mission flows are functional.");
   }
 } finally {
   socket?.close();
