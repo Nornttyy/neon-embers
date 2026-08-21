@@ -271,6 +271,7 @@ try {
       const canvas = document.querySelector('#game-canvas');
       const chips = [...document.querySelectorAll('#weapon-dock .weapon-chip')];
       const skills = [...document.querySelectorAll('#skill-dock .skill-slot')];
+      const initialSkillLabels = skills.map((skill) => skill.getAttribute('aria-label'));
       const initial = active();
 
       keyDown('e');
@@ -326,7 +327,7 @@ try {
         weaponShortcuts: chips.map((chip) => chip.getAttribute('aria-keyshortcuts')),
         skillSlots: skills.map((skill) => skill.dataset.skillSlot),
         skillDisabled: skills.map((skill) => skill.getAttribute('aria-disabled')),
-        skillLabels: skills.map((skill) => skill.getAttribute('aria-label')),
+        skillLabels: initialSkillLabels,
         initial,
         selectedTwo,
         selectedOne,
