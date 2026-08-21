@@ -1,12 +1,12 @@
-import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, SKILLS, WEAPONS } from "./config.js?v=67b2c11b0b75";
-import { audio } from "./audio.js?v=67b2c11b0b75";
-import { assetUrl } from "./revision.js?v=67b2c11b0b75";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, SKILLS, WEAPONS } from "./config.js?v=__ASSET_REVISION__";
+import { audio } from "./audio.js?v=__ASSET_REVISION__";
+import { assetUrl } from "./revision.js?v=__ASSET_REVISION__";
 
 const TAU = Math.PI * 2;
 const MAX_ASSET_LOAD_ATTEMPTS = 3;
 const ASSET_RETRY_DELAY = 140;
 const VFX_WARM_COLUMNS = 7;
-const VFX_WARM_ROWS = 5;
+const VFX_WARM_ROWS = 6;
 const VFX_WARM_CELL_SIZE = 96;
 const ARENA_CACHE_PADDING = 160;
 const WEAPON_TIP_TRAIL_CAPACITY = 11;
@@ -18,6 +18,22 @@ const WEAPON_SLOT_MELEE = 1;
 const WEAPON_SLOT_RANGED = 2;
 const WEAPON_SWITCH_LOCKED_ACTIONS = Object.freeze(["attack", "block", "dash", "broken", "skill"]);
 const SKILL_SLOT_COUNT = 3;
+const SCREEN_FLASH_MIN_INTERVAL = 0.34;
+const SCREEN_FLASH_REPEAT_INTERVAL = 0.16;
+const SCREEN_FLASH_REDUCED_SCALE = 0.24;
+const SCREEN_FLASH_OVERSCAN = 1.12;
+const SCREEN_FLASH_PRESETS = Object.freeze({
+  dash: Object.freeze({ family: "success", priority: 30, duration: 0.14, edgeAlpha: 0.28, tintAlpha: 0.018 }),
+  combo: Object.freeze({ family: "success", priority: 40, duration: 0.18, edgeAlpha: 0.46, tintAlpha: 0.035 }),
+  skill: Object.freeze({ family: "success", priority: 60, duration: 0.24, edgeAlpha: 0.58, tintAlpha: 0.048 }),
+  parry: Object.freeze({ family: "success", priority: 94, duration: 0.23, edgeAlpha: 0.76, tintAlpha: 0.072 }),
+  execution: Object.freeze({ family: "danger", priority: 92, duration: 0.28, edgeAlpha: 0.68, tintAlpha: 0.064 }),
+  hurt: Object.freeze({ family: "danger", priority: 70, duration: 0.22, edgeAlpha: 0.52, tintAlpha: 0.055 }),
+  guardBreak: Object.freeze({ family: "danger", priority: 80, duration: 0.29, edgeAlpha: 0.7, tintAlpha: 0.068 }),
+  boss: Object.freeze({ family: "danger", priority: 96, duration: 0.36, edgeAlpha: 0.8, tintAlpha: 0.082 }),
+  lethal: Object.freeze({ family: "danger", priority: 100, duration: 0.44, edgeAlpha: 0.88, tintAlpha: 0.095 }),
+  victory: Object.freeze({ family: "success", priority: 100, duration: 0.46, edgeAlpha: 0.86, tintAlpha: 0.075 }),
+});
 const FILTERED_SPRITE_VARIANTS = Object.freeze({
   enemyHit: Object.freeze({ filter: "brightness(2.1) saturate(.35)", imageKeys: Object.freeze([
     "enemyMelee", "skitterDrone", "lancerDrone", "enemyRanged",
@@ -65,6 +81,8 @@ const VFX_IMAGE_KEYS = Object.freeze([
   "skillCore",
   "dashArrival",
   "executionBurst",
+  "screenSuccess",
+  "screenDanger",
 ]);
 const PLAYER_SPRITES = Object.freeze({
   hunter: "playerHunter",
@@ -187,6 +205,30 @@ const VFX_KEYFRAMES = Object.freeze({
     { at: 0.92, scale: 0.36, alpha: 0.18, rotation: 0.104 },
     { at: 1, scale: 0.24, alpha: 0, rotation: 0.114 },
   ]),
+  screenPulse10: Object.freeze([
+    { at: 0, scale: 0.93, alpha: 0, rotation: -0.014 },
+    { at: 0.045, scale: 0.975, alpha: 0.82, rotation: -0.009 },
+    { at: 0.1, scale: 1.012, alpha: 1, rotation: -0.004 },
+    { at: 0.18, scale: 1.035, alpha: 0.58, rotation: 0.001 },
+    { at: 0.29, scale: 1.018, alpha: 0.78, rotation: 0.005 },
+    { at: 0.4, scale: 1.045, alpha: 0.88, rotation: 0.009 },
+    { at: 0.54, scale: 1.062, alpha: 0.62, rotation: 0.012 },
+    { at: 0.7, scale: 1.075, alpha: 0.38, rotation: 0.014 },
+    { at: 0.86, scale: 1.086, alpha: 0.16, rotation: 0.016 },
+    { at: 1, scale: 1.094, alpha: 0, rotation: 0.018 },
+  ]),
+  screenPulseReduced10: Object.freeze([
+    { at: 0, scale: 0.965, alpha: 0, rotation: -0.006 },
+    { at: 0.07, scale: 0.988, alpha: 1, rotation: -0.004 },
+    { at: 0.16, scale: 1.006, alpha: 0.78, rotation: -0.002 },
+    { at: 0.27, scale: 1.02, alpha: 0.62, rotation: 0 },
+    { at: 0.39, scale: 1.032, alpha: 0.49, rotation: 0.002 },
+    { at: 0.52, scale: 1.042, alpha: 0.37, rotation: 0.003 },
+    { at: 0.65, scale: 1.05, alpha: 0.27, rotation: 0.004 },
+    { at: 0.78, scale: 1.057, alpha: 0.17, rotation: 0.005 },
+    { at: 0.9, scale: 1.062, alpha: 0.08, rotation: 0.006 },
+    { at: 1, scale: 1.066, alpha: 0, rotation: 0.006 },
+  ]),
 });
 const formatTime = (seconds) => {
   const safe = Math.max(0, Math.ceil(seconds));
@@ -227,6 +269,10 @@ function createWeaponTipTrail() {
   };
 }
 
+function screenOverlaySpriteKey(kind, reduced) {
+  return `${kind}:${reduced ? "reduced" : "normal"}`;
+}
+
 function pointSegmentDistanceSquared(point, start, end) {
   const segmentX = end.x - start.x;
   const segmentY = end.y - start.y;
@@ -255,13 +301,17 @@ export class Game {
     this.camera = { x: GAME.width / 2, y: GAME.height / 2 };
     this.dashRequested = false;
     this.shake = 0;
-    this.flash = 0;
+    this.screenFlash = null;
+    this.screenFlashClock = 0;
+    this.screenFlashNextAt = 0;
+    this.screenFlashLastByKind = Object.create(null);
     this.hudAccumulator = 0;
     this.menuStars = Array.from({ length: 74 }, () => ({
       x: Math.random(), y: Math.random(), size: randomBetween(0.5, 2.1), phase: Math.random() * TAU,
     }));
     this.images = {};
     this.filteredSprites = { enemyHit: {}, playerSkill: {}, playerDash: {} };
+    this.screenOverlaySprites = Object.create(null);
     this.patterns = new WeakMap();
     this.arenaCache = { canvas: null, key: "", pendingKey: "", ready: false, promise: null, generation: 0 };
     this.assetLoadState = { ready: false, loaded: 0, failed: [] };
@@ -300,6 +350,8 @@ export class Game {
       skillCore: "assets/effects/skill-core.png",
       dashArrival: "assets/effects/dash-arrival.png",
       executionBurst: "assets/effects/execution-burst.png",
+      screenSuccess: "assets/effects/screen-success-overload.png",
+      screenDanger: "assets/effects/screen-danger-fracture.png",
       blade: WEAPONS.blade.asset,
       twin: WEAPONS.twin.asset,
       hammer: WEAPONS.hammer.asset,
@@ -328,11 +380,14 @@ export class Game {
     this.assetLoadState.total = assetEntries.length;
     this.vfxWarmState = { ready: false, warmed: 0, total: VFX_IMAGE_KEYS.length, failed: [] };
     this.filteredSpriteState = { ready: false, prepared: 0, total: 0, failed: [] };
+    this.screenOverlaySpriteState = { ready: false, prepared: 0, warmed: 0, total: Object.keys(SCREEN_FLASH_PRESETS).length * 2, failed: [] };
     this.emitLoadProgress("images");
     this.assetsReady = Promise.all(assetEntries.map(([id, path]) => this.loadImageAsset(id, path)))
       .then(async () => {
         await this.prepareFilteredSprites();
+        await this.prepareScreenOverlaySprites();
         await this.warmFilteredSprites();
+        await this.warmScreenOverlaySprites();
         await this.warmVfxImages();
         this.vfxWarmState.ready = true;
         this.assetLoadState.ready = true;
@@ -531,6 +586,118 @@ export class Game {
     this.emitLoadProgress("sprite-warm", 1, 1);
   }
 
+  async prepareScreenOverlaySprites() {
+    const variants = Object.entries(SCREEN_FLASH_PRESETS)
+      .flatMap(([kind, preset]) => [false, true].map((reduced) => ({ kind, preset, reduced })));
+    this.screenOverlaySpriteState.total = variants.length;
+    this.emitLoadProgress("screen-composites", 0, variants.length);
+    for (let index = 0; index < variants.length; index += 1) {
+      const { kind, preset, reduced } = variants[index];
+      const key = screenOverlaySpriteKey(kind, reduced);
+      const image = this.images[preset.family === "success" ? "screenSuccess" : "screenDanger"];
+      let surface = null;
+      try {
+        if (image?.complete && image.naturalWidth && image.naturalHeight) {
+          surface = document.createElement("canvas");
+          surface.width = image.naturalWidth;
+          surface.height = image.naturalHeight;
+          const context = surface.getContext("2d");
+          if (!context) {
+            surface = null;
+          } else {
+            const reducedScale = reduced ? SCREEN_FLASH_REDUCED_SCALE : 1;
+            const edgePeak = reduced ? Math.min(0.1, preset.edgeAlpha * reducedScale) : preset.edgeAlpha;
+            const tintPeak = reduced ? Math.min(0.02, preset.tintAlpha * reducedScale) : preset.tintAlpha;
+            context.globalCompositeOperation = "source-over";
+            context.globalAlpha = edgePeak > 0 ? clamp(tintPeak / edgePeak, 0, 1) : 0;
+            context.fillStyle = preset.family === "success" ? "#4df6ff" : "#ff2e67";
+            context.fillRect(0, 0, surface.width, surface.height);
+            context.globalAlpha = 1;
+            context.drawImage(image, 0, 0);
+          }
+        }
+      } catch {
+        surface = null;
+      }
+      if (surface) {
+        this.screenOverlaySprites[key] = surface;
+        this.screenOverlaySpriteState.prepared += 1;
+      } else if (!this.screenOverlaySpriteState.failed.includes(key)) {
+        this.screenOverlaySpriteState.failed.push(key);
+      }
+      this.emitLoadProgress("screen-composites", index + 1, variants.length);
+      if ((index + 1) % 4 === 0) await this.waitForAnimationFrames(1);
+    }
+  }
+
+  runScreenOverlaySpriteWarmPass() {
+    return new Promise((resolve) => {
+      const drawGrid = () => {
+        const context = this.ctx;
+        const sprites = Object.entries(this.screenOverlaySprites);
+        if (!context || sprites.length === 0) {
+          resolve(0);
+          return;
+        }
+        let warmed = 0;
+        let saved = false;
+        try {
+          context.save();
+          saved = true;
+          if (typeof context.resetTransform === "function") context.resetTransform();
+          else context.setTransform(1, 0, 0, 1, 0, 0);
+          context.globalAlpha = 0.25;
+          context.globalCompositeOperation = "source-over";
+          context.shadowBlur = 0;
+          context.filter = "none";
+          const columns = 5;
+          const rows = Math.max(1, Math.ceil(sprites.length / columns));
+          const cellSize = Math.max(1, Math.min(
+            96,
+            Math.floor((this.canvas.width - 2) / columns),
+            Math.floor((this.canvas.height - 2) / rows),
+          ));
+          const innerSize = Math.max(1, cellSize - 4);
+          for (let index = 0; index < sprites.length; index += 1) {
+            const [key, sprite] = sprites[index];
+            try {
+              const scale = Math.min(innerSize / sprite.width, innerSize / sprite.height);
+              const width = Math.max(1, sprite.width * scale);
+              const height = Math.max(1, sprite.height * scale);
+              const column = index % columns;
+              const row = Math.floor(index / columns);
+              const x = 1 + column * cellSize + (cellSize - width) / 2;
+              const y = 1 + row * cellSize + (cellSize - height) / 2;
+              context.drawImage(sprite, x, y, width, height);
+              warmed += 1;
+            } catch {
+              if (!this.screenOverlaySpriteState.failed.includes(key)) this.screenOverlaySpriteState.failed.push(key);
+            }
+          }
+        } catch {
+          warmed = 0;
+        } finally {
+          if (saved) {
+            try { context.restore(); } catch {
+              // The next normal render resets the main drawing state.
+            }
+          }
+          resolve(warmed);
+        }
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(drawGrid);
+      else window.setTimeout(drawGrid, 16);
+    });
+  }
+
+  async warmScreenOverlaySprites() {
+    this.emitLoadProgress("screen-composite-warm", 0, this.screenOverlaySpriteState.total);
+    this.screenOverlaySpriteState.warmed = await this.runScreenOverlaySpriteWarmPass();
+    await this.waitForAnimationFrames(3);
+    this.screenOverlaySpriteState.ready = true;
+    this.emitLoadProgress("screen-composite-warm", this.screenOverlaySpriteState.warmed, this.screenOverlaySpriteState.total);
+  }
+
   runVfxWarmPass(composite, warmedKeys) {
     return new Promise((resolve) => {
       const drawGrid = () => {
@@ -607,6 +774,48 @@ export class Game {
     });
   }
 
+  runScreenOverlayWarmPass(imageKey, composite, warmedKeys) {
+    return new Promise((resolve) => {
+      const drawOverlay = () => {
+        const context = this.ctx;
+        const image = this.images[imageKey];
+        if (!context || !image?.complete || !image.naturalWidth || !image.naturalHeight) {
+          warmedKeys.delete(imageKey);
+          this.markVfxWarmFailure(imageKey);
+          resolve();
+          return;
+        }
+        let saved = false;
+        try {
+          context.save();
+          saved = true;
+          if (typeof context.resetTransform === "function") context.resetTransform();
+          else context.setTransform(1, 0, 0, 1, 0, 0);
+          context.globalAlpha = 0.25;
+          context.globalCompositeOperation = composite;
+          context.shadowBlur = 0;
+          context.filter = "none";
+          const width = Math.max(1, (this.canvas.width - 2) * 1.24);
+          const height = Math.max(1, (this.canvas.height - 2) * 1.24);
+          context.drawImage(image, (this.canvas.width - width) / 2, (this.canvas.height - height) / 2, width, height);
+          warmedKeys.add(imageKey);
+        } catch {
+          warmedKeys.delete(imageKey);
+          this.markVfxWarmFailure(imageKey);
+        } finally {
+          if (saved) {
+            try { context.restore(); } catch {
+              // The next normal render resets the main transform and drawing state.
+            }
+          }
+          resolve();
+        }
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(drawOverlay);
+      else window.setTimeout(drawOverlay, 16);
+    });
+  }
+
   async warmVfxImages() {
     const warmedKeys = new Set();
     this.emitLoadProgress("vfx-source");
@@ -620,6 +829,10 @@ export class Game {
     this.emitLoadProgress("vfx-screen");
     await this.runVfxWarmPass("screen", warmedKeys);
     this.emitLoadProgress("vfx-screen");
+    await this.waitForAnimationFrames(3);
+    await this.runScreenOverlayWarmPass("screenSuccess", "screen", warmedKeys);
+    await this.waitForAnimationFrames(3);
+    await this.runScreenOverlayWarmPass("screenDanger", "source-over", warmedKeys);
     await this.waitForAnimationFrames(3);
     this.vfxWarmState.warmed = warmedKeys.size;
   }
@@ -704,6 +917,50 @@ export class Game {
     audio.setVolume(this.settings.volume);
     audio.setMusicVolume(this.settings.musicVolume);
     audio.setEnabled(this.settings.volume > 0 || this.settings.musicVolume > 0);
+  }
+
+  triggerScreenFlash(kind) {
+    const preset = SCREEN_FLASH_PRESETS[kind];
+    if (!preset) return false;
+    if (!this.screenFlashLastByKind) this.screenFlashLastByKind = Object.create(null);
+    const now = Number(this.screenFlashClock) || 0;
+    const current = this.screenFlash?.life > 0 ? this.screenFlash : null;
+    const lastSameKind = this.screenFlashLastByKind[kind] ?? -Infinity;
+    if (now - lastSameKind < SCREEN_FLASH_REPEAT_INTERVAL) return false;
+    if (current && preset.priority < current.priority) return false;
+    const insideGlobalCooldown = now < (Number(this.screenFlashNextAt) || 0);
+    if (insideGlobalCooldown) {
+      if (!current || preset.priority <= current.priority) return false;
+      const progress = clamp(1 - current.life / current.maxLife, 0, 1);
+      current.kind = kind;
+      current.family = preset.family;
+      current.priority = preset.priority;
+      current.maxLife = preset.duration;
+      current.life = preset.duration * (1 - progress);
+      current.edgeAlpha = Math.max(current.edgeAlpha, preset.edgeAlpha);
+      current.tintAlpha = Math.max(current.tintAlpha, preset.tintAlpha);
+      this.screenFlashLastByKind[kind] = now;
+      return true;
+    }
+    this.screenFlashLastByKind[kind] = now;
+    this.screenFlashNextAt = now + SCREEN_FLASH_MIN_INTERVAL;
+    this.screenFlash = {
+      kind,
+      family: preset.family,
+      priority: preset.priority,
+      life: preset.duration,
+      maxLife: preset.duration,
+      edgeAlpha: preset.edgeAlpha,
+      tintAlpha: preset.tintAlpha,
+    };
+    return true;
+  }
+
+  updateScreenFlash(dt) {
+    this.screenFlashClock = (Number(this.screenFlashClock) || 0) + dt;
+    if (!this.screenFlash) return;
+    this.screenFlash.life = Math.max(0, this.screenFlash.life - dt);
+    if (this.screenFlash.life <= 0) this.screenFlash = null;
   }
 
   setTouchVector(x, y) {
@@ -891,6 +1148,7 @@ export class Game {
       player.barrier = Math.max(player.barrier, 55);
       this.effects.push({ type: "barrierShell", x: player.x, y: player.y, angle: player.facing, radius: 126, life: 0.54, maxLife: 0.54, color: "#ffcc66", skillCore: true });
     }
+    this.triggerScreenFlash("skill");
     audio.skill(skillId);
     this.spawnBurst(player.x, player.y, this.run.core.color, 22, 210);
     return true;
@@ -1001,7 +1259,10 @@ export class Game {
     this.camera.x = this.player.x;
     this.camera.y = this.player.y;
     this.shake = 0;
-    this.flash = 0;
+    this.screenFlash = null;
+    this.screenFlashClock = 0;
+    this.screenFlashNextAt = 0;
+    this.screenFlashLastByKind = Object.create(null);
     this.state = "room";
     this.arenaReady = this.prepareArenaCache();
     audio.pauseMusic();
@@ -1124,6 +1385,7 @@ export class Game {
   frame(time) {
     const dt = Math.min(0.034, Math.max(0, (time - this.lastFrame) / 1000));
     this.lastFrame = time;
+    this.updateScreenFlash(dt);
     if (this.state === "playing") this.update(dt);
     this.render(time / 1000);
     requestAnimationFrame((nextTime) => this.frame(nextTime));
@@ -1132,7 +1394,6 @@ export class Game {
   update(dt) {
     const run = this.run;
     run.elapsed += dt;
-    this.flash = Math.max(0, this.flash - dt * 4.5);
     this.shake = Math.max(0, this.shake - dt * 20);
     this.updatePlayer(dt);
     this.updateWeaponTipTrails(dt);
@@ -1291,6 +1552,7 @@ export class Game {
         angle: Math.atan2(player.dashVector.y, player.dashVector.x),
         radius: 118, life: 0.24, maxLife: 0.24, color: this.run.core.color,
       });
+      this.triggerScreenFlash("dash");
     }
 
     if (player.staminaDelay <= 0 && player.action !== "block") {
@@ -1473,7 +1735,7 @@ export class Game {
         run.boss = enemy;
         this.callbacks.onAnnouncement?.({ title: "零号执行体", subtitle: "最终目标已进入核心战区" });
         this.effects.push({ type: "bossBurst", x: enemy.x, y: enemy.y, angle: 0, radius: 270, life: 0.72, maxLife: 0.72, color: enemy.color });
-        this.flash = this.settings.reduceFlash ? 0.1 : 0.4;
+        this.triggerScreenFlash("boss");
         this.shake = 16;
         audio.explosion();
       }
@@ -1758,6 +2020,7 @@ export class Game {
       heavy: heavyImpact,
       killed: enemy.hp <= 0,
     });
+    if (comboFinisher) this.triggerScreenFlash("combo");
     if (enemy.hp <= 0) {
       this.killEnemy(enemy, {
         finisher: !enemy.boss && (comboFinisher || kind === "skill" || kind === "reflect"),
@@ -1788,6 +2051,8 @@ export class Game {
       life: enemy.boss ? 0.82 : 0.48, maxLife: enemy.boss ? 0.82 : 0.48, color: enemy.color,
       finisher,
     });
+    if (enemy.boss) this.triggerScreenFlash("victory");
+    else if (finisher) this.triggerScreenFlash("execution");
     this.spawnBurst(enemy.x, enemy.y, enemy.color, enemy.boss ? 48 : 14, enemy.boss ? 300 : 180);
     if (enemy.boss) {
       this.run.boss = enemy;
@@ -1816,6 +2081,7 @@ export class Game {
         const activeParry = this.effects.find((effect) => effect.type === "parryFlash" && effect.life > 0);
         if (activeParry) Object.assign(activeParry, parryEffect);
         else this.effects.push(parryEffect);
+        this.triggerScreenFlash("parry");
         this.callbacks.onAnnouncement?.({ title: "精准招架", subtitle: "攻击者已失衡" });
         audio.guard(true);
         return "parry";
@@ -1861,7 +2127,7 @@ export class Game {
     }
     if (remaining > 0) player.health -= remaining;
     player.invulnerable = 0.46;
-    this.flash = this.settings.reduceFlash ? 0.06 : 0.22;
+    this.triggerScreenFlash(player.health <= 0 ? "lethal" : "hurt");
     this.shake = 11;
     this.spawnBurst(player.x, player.y, "#ff5478", 13, 180);
     audio.hurt();
@@ -1880,6 +2146,7 @@ export class Game {
       type: "guardBreak", x: player.x, y: player.y, angle: player.facing,
       radius: 168, life: 0.46, maxLife: 0.46, color: "#ffcc66",
     });
+    this.triggerScreenFlash("guardBreak");
     this.callbacks.onAnnouncement?.({ title: "防御过载", subtitle: "体力耗尽" });
     this.shake = 8;
   }
@@ -2068,11 +2335,44 @@ export class Game {
     this.renderEffects(ctx, false);
     this.renderDamageTexts(ctx);
     ctx.restore();
+    this.renderScreenFlash(ctx);
     if (this.pointer.active && this.state === "playing") this.renderCrosshair(ctx);
-    if (this.flash > 0) {
-      ctx.fillStyle = `rgba(255,70,110,${this.flash})`;
+  }
+
+  renderScreenFlash(ctx) {
+    const effect = this.screenFlash;
+    if (!effect?.life || !effect.maxLife) return false;
+    const progress = clamp(1 - effect.life / effect.maxLife, 0, 1);
+    const reduced = this.settings.reduceFlash;
+    const frames = reduced ? VFX_KEYFRAMES.screenPulseReduced10 : VFX_KEYFRAMES.screenPulse10;
+    const frame = sampleKeyframes(frames, progress);
+    const reducedScale = reduced ? SCREEN_FLASH_REDUCED_SCALE : 1;
+    const success = effect.family === "success";
+    const image = this.images[success ? "screenSuccess" : "screenDanger"];
+    const compositeSprite = this.screenOverlaySprites[screenOverlaySpriteKey(effect.kind, reduced)];
+    const tintPeak = reduced ? Math.min(0.02, effect.tintAlpha * reducedScale) : effect.tintAlpha;
+    const edgePeak = reduced ? Math.min(0.1, effect.edgeAlpha * reducedScale) : effect.edgeAlpha;
+    const tintAlpha = tintPeak * frame.alpha;
+    ctx.save();
+    if (!compositeSprite) {
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = tintAlpha;
+      ctx.fillStyle = success ? "#4df6ff" : "#ff2e67";
       ctx.fillRect(0, 0, this.view.width, this.view.height);
     }
+    const drawable = compositeSprite || image;
+    const drawableReady = compositeSprite?.width || (image?.complete && image.naturalWidth);
+    if (drawableReady) {
+      const width = this.view.width * frame.scale * SCREEN_FLASH_OVERSCAN;
+      const height = this.view.height * frame.scale * SCREEN_FLASH_OVERSCAN;
+      ctx.translate(this.view.width / 2, this.view.height / 2);
+      ctx.rotate(frame.rotation * (success ? 1 : -1));
+      ctx.globalAlpha = edgePeak * frame.alpha;
+      ctx.globalCompositeOperation = compositeSprite ? "source-over" : success ? "screen" : "source-over";
+      ctx.drawImage(drawable, -width / 2, -height / 2, width, height);
+    }
+    ctx.restore();
+    return true;
   }
 
   renderMenuBackground(time) {

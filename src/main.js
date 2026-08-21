@@ -1,8 +1,8 @@
-import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=67b2c11b0b75";
-import { audio } from "./audio.js?v=67b2c11b0b75";
-import { adService } from "./ad-service.js?v=67b2c11b0b75";
-import { Game } from "./game.js?v=67b2c11b0b75";
-import { ASSET_REVISION, assetUrl } from "./revision.js?v=67b2c11b0b75";
+import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=__ASSET_REVISION__";
+import { audio } from "./audio.js?v=__ASSET_REVISION__";
+import { adService } from "./ad-service.js?v=__ASSET_REVISION__";
+import { Game } from "./game.js?v=__ASSET_REVISION__";
+import { ASSET_REVISION, assetUrl } from "./revision.js?v=__ASSET_REVISION__";
 
 const SAVE_KEY = "neon-embers-save-v1";
 const SW_REFRESH_KEY = "neon-embers-sw-refresh";
@@ -171,12 +171,16 @@ function renderLoadProgress({
     setLoadingStatus(`生成受击与动作材质 ${prepared}/${phaseTotal}`, 76 + (phaseTotal ? prepared / phaseTotal * 4 : 0));
   } else if (phase === "sprite-warm") {
     setLoadingStatus("提交角色材质", phaseLoaded >= phaseTotal ? 82 : 80);
+  } else if (phase === "screen-composites") {
+    setLoadingStatus("合成全屏反馈", 82 + (phaseTotal ? Math.min(phaseTotal, phaseLoaded) / phaseTotal * 2 : 0));
+  } else if (phase === "screen-composite-warm") {
+    setLoadingStatus("提交全屏反馈", phaseLoaded >= phaseTotal ? 85 : 84);
   } else if (phase === "vfx-source") {
-    setLoadingStatus("准备战斗特效", 85);
+    setLoadingStatus("准备战斗特效", 87);
   } else if (phase === "vfx-lighter") {
-    setLoadingStatus("准备能量光效", 91);
+    setLoadingStatus("准备能量光效", 92);
   } else if (phase === "vfx-screen") {
-    setLoadingStatus("校准冲击光效", 96);
+    setLoadingStatus("校准冲击光效", 97);
   } else if (phase === "arena-cache") {
     setLoadingStatus("构建完整战区", phaseLoaded >= phaseTotal ? 100 : 98);
   } else if (phase === "ready") {
