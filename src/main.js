@@ -1,8 +1,8 @@
-import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=e41b17a4330b";
-import { audio } from "./audio.js?v=e41b17a4330b";
-import { adService } from "./ad-service.js?v=e41b17a4330b";
-import { Game } from "./game.js?v=e41b17a4330b";
-import { ASSET_REVISION, assetUrl } from "./revision.js?v=e41b17a4330b";
+import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=67b2c11b0b75";
+import { audio } from "./audio.js?v=67b2c11b0b75";
+import { adService } from "./ad-service.js?v=67b2c11b0b75";
+import { Game } from "./game.js?v=67b2c11b0b75";
+import { ASSET_REVISION, assetUrl } from "./revision.js?v=67b2c11b0b75";
 
 const SAVE_KEY = "neon-embers-save-v1";
 const SW_REFRESH_KEY = "neon-embers-sw-refresh";
@@ -91,7 +91,7 @@ const elements = {
   hudScrap: byId("hud-scrap"),
   hudAmmo: byId("hud-ammo"),
   dashFill: byId("dash-fill"),
-  skillFill: byId("skill-fill"),
+  skillDock: byId("skill-dock"),
   bossBar: byId("boss-bar"),
   bossName: byId("boss-name"),
   bossFill: byId("boss-fill"),
@@ -117,6 +117,7 @@ function showScreen(id, { keepHud = false } = {}) {
   if (!keepHud) {
     hud.classList.remove("is-active");
     touchControls.classList.remove("is-active");
+    touchControls.setAttribute("aria-hidden", "true");
   }
 }
 
@@ -124,7 +125,9 @@ function showGameLayer(id = null) {
   for (const screen of allScreens) screen.classList.toggle("is-active", screen.id === id);
   currentScreen = id || "game";
   hud.classList.add("is-active");
-  touchControls.classList.toggle("is-active", coarsePointer.matches && !id);
+  const touchActive = coarsePointer.matches && !id;
+  touchControls.classList.toggle("is-active", touchActive);
+  touchControls.setAttribute("aria-hidden", String(!touchActive));
 }
 
 function showToast(message, duration = 1700) {
@@ -275,13 +278,30 @@ function renderHud(data) {
   elements.hudScrap.textContent = data.scrap;
   elements.hudAmmo.textContent = data.reload > 0 ? "装填" : `${data.ammo}/${data.maxAmmo}`;
   elements.dashFill.style.width = `${data.dash * 100}%`;
-  elements.skillFill.style.width = `${data.skill * 100}%`;
+
+  const skillSignature = data.skills.map((skill) => `${skill.slot}:${skill.id || "empty"}:${skill.name}:${skill.active ? 1 : 0}`).join("|");
+  if (elements.skillDock.dataset.signature !== skillSignature) {
+    elements.skillDock.dataset.signature = skillSignature;
+    elements.skillDock.innerHTML = data.skills.map((skill) => `
+      <div class="skill-slot${skill.equipped ? " is-equipped" : " is-empty"}${skill.active ? " is-active" : ""}" data-skill-slot="${skill.slot}" style="--skill-color:${skill.color}" role="listitem" aria-disabled="${skill.equipped ? "false" : "true"}" aria-current="${skill.active ? "true" : "false"}">
+        <small>S${skill.slot}</small><span>${skill.name}</span><i><b></b></i>
+      </div>
+    `).join("");
+  }
+  for (const skill of data.skills) {
+    const item = elements.skillDock.querySelector(`[data-skill-slot="${skill.slot}"]`);
+    if (!item) continue;
+    const ready = skill.equipped && skill.charge >= 0.999;
+    item.classList.toggle("is-ready", ready);
+    item.querySelector("b").style.width = `${Math.max(0, skill.charge) * 100}%`;
+    item.setAttribute("aria-label", skill.equipped ? `技能槽 ${skill.slot}：${skill.name}${skill.active ? "，已选中" : ""}${ready ? "，就绪" : "，冷却中"}` : `技能槽 ${skill.slot}：待装配`);
+  }
 
   const signature = data.weapons.map((weapon) => `${weapon.slot}:${weapon.id}:${weapon.ammo || ""}:${weapon.active ? 1 : 0}`).join("|");
   if (elements.weaponDock.dataset.signature !== signature) {
     elements.weaponDock.dataset.signature = signature;
     elements.weaponDock.innerHTML = data.weapons.map((weapon) => `
-      <div class="weapon-chip${weapon.active ? " is-active" : ""}" data-slot="${weapon.slot}" style="--weapon-color:${weapon.color}" role="listitem" aria-current="${weapon.active ? "true" : "false"}" aria-keyshortcuts="${weapon.slot}" title="按 ${weapon.slot} 选择 ${weapon.name}">
+      <div class="weapon-chip${weapon.active ? " is-active" : ""}" data-slot="${weapon.slot}" style="--weapon-color:${weapon.color}" role="listitem" aria-current="${weapon.active ? "true" : "false"}" aria-keyshortcuts="${weapon.slot}" title="按 ${weapon.slot} 选择，或滚动鼠标滚轮切换武器">
         <kbd class="weapon-slot-key">${weapon.slot}</kbd>
         ${weapon.asset ? `<img src="${assetUrl(weapon.asset)}" alt="" />` : `<b>${weapon.name.slice(0, 2)}</b>`}
         <span>${weapon.ammo || (weapon.active ? "已装备" : "近战")}</span>
@@ -522,9 +542,9 @@ byId("touch-dash").addEventListener("pointerdown", (event) => { event.preventDef
 byId("touch-attack").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestPrimaryAttack(); });
 byId("touch-ranged").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestRanged(); });
 byId("touch-skill").addEventListener("pointerdown", (event) => { event.preventDefault(); game.requestSkill(); });
-byId("touch-block").addEventListener("pointerdown", (event) => { event.preventDefault(); game.setBlocking(true); });
+byId("touch-block").addEventListener("pointerdown", (event) => { event.preventDefault(); game.setBlockInput("touch", true); });
 for (const eventName of ["pointerup", "pointercancel", "pointerleave"]) {
-  byId("touch-block").addEventListener(eventName, () => game.setBlocking(false));
+  byId("touch-block").addEventListener(eventName, () => game.setBlockInput("touch", false));
 }
 
 game.applySettings(profile.settings);

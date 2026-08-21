@@ -12,12 +12,12 @@
     <meta property="og:type" content="website" />
     <meta property="og:title" content="霓虹余烬 · Neon Embers" />
     <meta property="og:description" content="操控科技小球，使用近战、远程、闪避、格挡和技能连续突破三处战区。" />
-    <meta property="og:image" content="assets/icon-512.png?v=e41b17a4330b" />
+    <meta property="og:image" content="assets/icon-512.png?v=67b2c11b0b75" />
     <title>霓虹余烬 · Neon Embers</title>
-    <link rel="manifest" href="manifest.webmanifest?v=e41b17a4330b" />
-    <link rel="icon" href="assets/icon.svg?v=e41b17a4330b" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="assets/icon-192.png?v=e41b17a4330b" />
-    <link rel="stylesheet" href="styles.css?v=e41b17a4330b" />
+    <link rel="manifest" href="manifest.webmanifest?v=67b2c11b0b75" />
+    <link rel="icon" href="assets/icon.svg?v=67b2c11b0b75" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="assets/icon-192.png?v=67b2c11b0b75" />
+    <link rel="stylesheet" href="styles.css?v=67b2c11b0b75" />
   </head>
   <body>
     <div id="app">
@@ -40,7 +40,7 @@
 
       <section id="menu-screen" class="screen menu-screen is-active" aria-labelledby="game-title">
         <div class="menu-topline">
-          <span class="signal"><i></i> STAGE MISSION // 0.9.3</span>
+          <span class="signal"><i></i> STAGE MISSION // 0.9.5</span>
           <button class="icon-button" id="settings-button" type="button" aria-label="打开设置">⚙</button>
         </div>
 
@@ -98,9 +98,9 @@
           <h2 id="guide-title">先学会主动战斗</h2>
           <div class="guide-grid">
             <article><b>01</b><div><h3>移动与瞄准</h3><p>WASD 移动，鼠标控制朝向；触屏攻击会朝向附近敌人。</p></div></article>
-            <article><b>02</b><div><h3>切换与攻击</h3><p>按 1 选择近战、2 选择手枪；鼠标左键使用当前武器，近战可连续三段。</p></div></article>
-            <article><b>03</b><div><h3>格挡与招架</h3><p>按住右键或 K 正面格挡。攻击命中前一瞬开始格挡可精准招架。</p></div></article>
-            <article><b>04</b><div><h3>闪避与技能</h3><p>空格闪避，右键格挡，E 使用球体主动技能；触屏使用独立操作按钮。</p></div></article>
+            <article><b>02</b><div><h3>切换与攻击</h3><p>按 1、2 或滚动鼠标滚轮切换近战与手枪；鼠标左键使用当前武器。</p></div></article>
+            <article><b>03</b><div><h3>格挡与招架</h3><p>按住 E 或鼠标右键正面格挡。攻击命中前一瞬开始格挡可精准招架。</p></div></article>
+            <article><b>04</b><div><h3>闪避与技能</h3><p>空格闪避；R 轮换技能，Q 释放当前技能。后续可继续装配新技能。</p></div></article>
           </div>
           <div class="guide-tip"><span>任务目标</span>每关从整备房间出发，使用回收能源购买固定补给；清除敌群后返回房间，最终击败零号执行体。</div>
           <button class="primary-button compact" id="guide-start-button" type="button"><span>明白，选择球体</span></button>
@@ -140,10 +140,11 @@
           <div><span>手枪弹药</span><strong id="hud-ammo">6/6</strong></div>
           <button id="pause-button" class="hud-pause" type="button" aria-label="暂停">Ⅱ</button>
         </div>
-        <div id="weapon-dock" class="weapon-dock" role="list" aria-label="武器槽位"></div>
+        <div id="weapon-dock" class="weapon-dock" role="list" aria-label="武器槽位，按 1、2 或滚轮切换" aria-keyshortcuts="1 2"></div>
         <div class="action-indicators">
           <div class="dash-indicator"><span>闪避</span><i><b id="dash-fill"></b></i><kbd>SPACE</kbd></div>
-          <div class="skill-indicator"><span>技能</span><i><b id="skill-fill"></b></i><kbd>E</kbd></div>
+          <div class="guard-indicator"><span>防御</span><kbd>E</kbd><kbd>RMB</kbd></div>
+          <div class="skill-indicator"><span>技能</span><kbd>R</kbd><div id="skill-dock" class="skill-dock" role="list" aria-label="技能槽位，按 R 轮换，按 Q 释放" aria-keyshortcuts="r q"></div><kbd>Q</kbd></div>
         </div>
         <div id="boss-bar" class="boss-bar"><span id="boss-name">零号收割机</span><i><b id="boss-fill"></b></i></div>
       </section>
@@ -214,6 +215,6 @@
       <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </div>
 
-    <script type="module" src="src/main.js?v=e41b17a4330b"></script>
+    <script type="module" src="src/main.js?v=67b2c11b0b75"></script>
   </body>
 </html>

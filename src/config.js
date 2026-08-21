@@ -51,6 +51,12 @@ export const WEAPONS = Object.freeze({
   shotgun: { id: "shotgun", name: "磁轨霰弹枪", color: "#ff8a55", description: "后续版本加入的近距离远程武器。" },
 });
 
+export const SKILLS = Object.freeze({
+  pulseSlash: { id: "pulseSlash", name: "脉冲斩", color: "#4df6ff", cooldown: 8, description: "释放近距离环形脉冲斩。" },
+  overdrive: { id: "overdrive", name: "相位超频", color: "#b77dff", cooldown: 8, description: "短时间提高移动与攻击速度。" },
+  barrier: { id: "barrier", name: "应急护盾", color: "#ffcc66", cooldown: 8, description: "立即生成一层临时护盾。" },
+});
+
 export const CORES = Object.freeze({
   hunter: {
     id: "hunter", name: "剑锋球体", subtitle: "均衡 · 反击",
