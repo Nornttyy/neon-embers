@@ -496,10 +496,21 @@ h1 span { color: var(--cyan); }
 .weapon-chip span { position: absolute; right: 5px; bottom: 4px; display: block; color: #dcecff; font-size: 8px; font-weight: 850; text-shadow: 0 1px 3px #000; }
 .weapon-chip .weapon-slot-key { position: absolute; left: 4px; top: 4px; z-index: 1; min-width: 16px; padding: 2px 4px; border-color: var(--weapon-color); color: #efffff; font-size: 9px; font-weight: 900; line-height: 1; text-align: center; }
 .action-indicators { position: absolute; right: 24px; bottom: 27px; display: grid; gap: 7px; }
-.dash-indicator, .skill-indicator { display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--muted); font-size: 9px; font-weight: 800; }
-.dash-indicator i, .skill-indicator i { width: 76px; height: 5px; background: rgba(255,255,255,.09); }
-.dash-indicator b, .skill-indicator b { display: block; width: 100%; height: 100%; background: var(--cyan); }
-.skill-indicator b { background: var(--purple); }
+.dash-indicator, .guard-indicator, .skill-indicator { display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--muted); font-size: 9px; font-weight: 800; }
+.dash-indicator i { width: 76px; height: 5px; background: rgba(255,255,255,.09); }
+.dash-indicator b { display: block; width: 100%; height: 100%; background: var(--cyan); }
+.guard-indicator kbd { color: #c8fbff; border-color: rgba(77,246,255,.3); }
+.skill-indicator > kbd { color: #e3d8ff; border-color: rgba(183,125,255,.35); }
+.skill-dock { display: flex; justify-content: flex-end; gap: 6px; }
+.skill-slot { width: 82px; min-height: 36px; display: grid; grid-template-columns: 22px 1fr; align-items: center; gap: 3px 5px; padding: 5px 6px; border: 1px solid rgba(114,137,167,.2); background: rgba(4,10,22,.8); opacity: .58; }
+.skill-slot small { grid-row: 1 / span 2; color: #8398ad; font-size: 8px; font-weight: 900; letter-spacing: .05em; text-align: center; }
+.skill-slot span { overflow: hidden; color: #aebed0; font-size: 8px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
+.skill-slot i { height: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
+.skill-slot b { display: block; width: 0; height: 100%; background: var(--skill-color); transition: width .08s linear; }
+.skill-slot.is-equipped { opacity: .88; border-color: rgba(170,114,255,.38); }
+.skill-slot.is-active { opacity: 1; border-color: var(--skill-color); background: linear-gradient(145deg, rgba(30,24,54,.96), rgba(4,10,22,.92)); box-shadow: 0 0 8px color-mix(in srgb, var(--skill-color) 34%, transparent); }
+.skill-slot.is-ready { opacity: 1; border-color: var(--skill-color); box-shadow: 0 0 8px rgba(170,114,255,.22); }
+.skill-slot.is-active small, .skill-slot.is-ready small { color: #fff; }
 kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgba(0,0,0,.35); color: #9cb1c4; font: inherit; }
 .boss-bar { position: absolute; left: 50%; bottom: 28px; width: min(460px, 50vw); transform: translateX(-50%); display: none; text-align: center; }
 .boss-bar.is-active { display: block; }

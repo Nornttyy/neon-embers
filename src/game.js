@@ -1,6 +1,6 @@
-import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, WEAPONS } from "./config.js?v=e41b17a4330b";
-import { audio } from "./audio.js?v=e41b17a4330b";
-import { assetUrl } from "./revision.js?v=e41b17a4330b";
+import { CORES, ENEMIES, GAME, MISSION_STAGES, ROOM_ITEMS, SKILLS, WEAPONS } from "./config.js?v=__ASSET_REVISION__";
+import { audio } from "./audio.js?v=__ASSET_REVISION__";
+import { assetUrl } from "./revision.js?v=__ASSET_REVISION__";
 
 const TAU = Math.PI * 2;
 const MAX_ASSET_LOAD_ATTEMPTS = 3;
@@ -16,6 +16,7 @@ const WEAPON_TIP_TRAIL_HANDS = Object.freeze(["primary", "offhand"]);
 const WEAPON_SLOT_MELEE = 1;
 const WEAPON_SLOT_RANGED = 2;
 const WEAPON_SWITCH_LOCKED_ACTIONS = Object.freeze(["attack", "block", "dash", "broken", "skill"]);
+const SKILL_SLOT_COUNT = 3;
 const FILTERED_SPRITE_VARIANTS = Object.freeze({
   enemyHit: Object.freeze({ filter: "brightness(2.1) saturate(.35)", imageKeys: Object.freeze([
     "enemyMelee", "skitterDrone", "lancerDrone", "enemyRanged",
@@ -216,6 +217,8 @@ export class Game {
     this.lastFrame = performance.now();
     this.view = { width: window.innerWidth, height: window.innerHeight, dpr: 1 };
     this.keys = new Set();
+    this.blockInputs = new Set();
+    this.weaponWheelGesture = { delta: 0, switched: false, resetTimer: 0 };
     this.touchVector = { x: 0, y: 0 };
     this.pointer = { x: window.innerWidth * 0.7, y: window.innerHeight * 0.5, active: false };
     this.camera = { x: GAME.width / 2, y: GAME.height / 2 };
@@ -591,17 +594,19 @@ export class Game {
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(key)) event.preventDefault();
       this.keys.add(key);
       if (event.repeat) return;
-      if (key === "1" || key === "2") this.selectWeaponSlot(Number(key));
+      if (key === "1") this.selectWeaponSlot(WEAPON_SLOT_MELEE);
+      if (key === "2") this.selectWeaponSlot(WEAPON_SLOT_RANGED);
       if (key === "j") this.requestPrimaryAttack();
-      if (key === "k") this.setBlocking(true);
-      if (key === "e") this.requestSkill();
+      if (key === "e") this.setBlockInput("keyboard", true);
+      if (key === "q") this.requestSkill();
+      if (key === "r") this.cycleSkillSlot();
       if (key === " ") this.requestDash();
       if (key === "escape" || key === "p") this.togglePause();
     });
     window.addEventListener("keyup", (event) => {
       const key = event.key.toLowerCase();
       this.keys.delete(key);
-      if (key === "k") this.setBlocking(false);
+      if (key === "e") this.setBlockInput("keyboard", false);
     });
     this.canvas.addEventListener("pointermove", (event) => {
       this.pointer.x = event.clientX;
@@ -612,14 +617,31 @@ export class Game {
       if (this.state !== "playing") return;
       audio.unlock();
       if (event.button === 0) this.requestPrimaryAttack();
-      if (event.button === 2) this.setBlocking(true);
+      if (event.button === 2) this.setBlockInput("mouse", true);
     });
     window.addEventListener("pointerup", (event) => {
-      if (event.button === 2) this.setBlocking(false);
+      if (event.button === 2) this.setBlockInput("mouse", false);
     });
     this.canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+    this.canvas.addEventListener("wheel", (event) => {
+      if (!this.player || !["playing", "room"].includes(this.state)) return;
+      if (event.ctrlKey || event.deltaY === 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+      event.preventDefault();
+      const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? this.view.height : 1;
+      const gesture = this.weaponWheelGesture;
+      gesture.delta += event.deltaY * scale;
+      window.clearTimeout(gesture.resetTimer);
+      gesture.resetTimer = window.setTimeout(() => this.resetWeaponWheelGesture(), 160);
+      if (!gesture.switched && Math.abs(gesture.delta) >= 48) {
+        gesture.switched = true;
+        gesture.delta = 0;
+        this.toggleWeaponSlot();
+      }
+    }, { passive: false });
     window.addEventListener("blur", () => {
       this.keys.clear();
+      this.blockInputs.clear();
+      this.resetWeaponWheelGesture();
       this.setTouchVector(0, 0);
       this.setBlocking(false);
       if (this.state === "playing") this.pause(false);
@@ -651,6 +673,13 @@ export class Game {
     this.touchVector = normalized(x, y);
   }
 
+  resetWeaponWheelGesture() {
+    window.clearTimeout(this.weaponWheelGesture.resetTimer);
+    this.weaponWheelGesture.delta = 0;
+    this.weaponWheelGesture.switched = false;
+    this.weaponWheelGesture.resetTimer = 0;
+  }
+
   setBlocking(active) {
     if (!this.player) return;
     const wasBlocking = this.player.blockHeld;
@@ -661,6 +690,14 @@ export class Game {
       this.player.parryTimer = this.player.stats.parryWindow;
     }
     if (!active && this.player.action === "block") this.player.action = "idle";
+  }
+
+  setBlockInput(source, active) {
+    if (active && (!this.player || this.state !== "playing")) return false;
+    if (active) this.blockInputs.add(source);
+    else this.blockInputs.delete(source);
+    this.setBlocking(this.blockInputs.size > 0);
+    return true;
   }
 
   selectWeaponSlot(slot) {
@@ -677,6 +714,13 @@ export class Game {
     }
     this.applyWeaponSlot(nextSlot);
     return true;
+  }
+
+  toggleWeaponSlot() {
+    if (!this.player) return false;
+    const currentSlot = this.player.pendingWeaponSlot || this.player.activeWeaponSlot;
+    const nextSlot = currentSlot === WEAPON_SLOT_MELEE ? WEAPON_SLOT_RANGED : WEAPON_SLOT_MELEE;
+    return this.selectWeaponSlot(nextSlot);
   }
 
   applyWeaponSlot(slot) {
@@ -700,6 +744,26 @@ export class Game {
     const player = this.player;
     if (!player?.pendingWeaponSlot || player.action !== "idle") return false;
     return this.applyWeaponSlot(player.pendingWeaponSlot);
+  }
+
+  selectSkillSlot(slot) {
+    if (!this.player || !this.run || !["playing", "room"].includes(this.state)) return false;
+    const nextSlot = Number(slot);
+    if (!Number.isInteger(nextSlot) || nextSlot < 1 || nextSlot > SKILL_SLOT_COUNT) return false;
+    if (!this.run.skillSlots[nextSlot - 1]) return false;
+    this.player.activeSkillSlot = nextSlot;
+    this.emitHud(true);
+    return true;
+  }
+
+  cycleSkillSlot(direction = 1) {
+    if (!this.player || !this.run || !["playing", "room"].includes(this.state)) return false;
+    const step = Number(direction) < 0 ? -1 : 1;
+    for (let offset = 1; offset <= SKILL_SLOT_COUNT; offset += 1) {
+      const slot = ((this.player.activeSkillSlot - 1 + step * offset + SKILL_SLOT_COUNT) % SKILL_SLOT_COUNT) + 1;
+      if (this.run.skillSlots[slot - 1]) return this.selectSkillSlot(slot);
+    }
+    return false;
   }
 
   requestPrimaryAttack() {
@@ -760,16 +824,21 @@ export class Game {
     if (player.ammo <= 0) this.startReload();
   }
 
-  requestSkill() {
-    if (this.state !== "playing" || !this.player || this.player.skillCooldown > 0) return;
+  requestSkill(slot = this.player?.activeSkillSlot || 1) {
+    if (this.state !== "playing" || !this.player) return false;
+    const slotIndex = Number(slot) - 1;
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= SKILL_SLOT_COUNT) return false;
+    const skillId = this.run.skillSlots[slotIndex];
+    const definition = skillId ? SKILLS[skillId] : null;
+    if (!definition || this.player.skillCooldowns[slotIndex] > 0) return false;
+    if (!["pulseSlash", "overdrive", "barrier"].includes(skillId)) return false;
     const player = this.player;
-    if (["dash", "broken"].includes(player.action)) return;
+    if (["dash", "broken", "skill"].includes(player.action)) return false;
     player.blockHeld = false;
     player.action = "skill";
     player.actionTimer = 0.34;
-    const cooldown = 8 * player.stats.skillCooldown;
-    player.skillCooldown = cooldown;
-    if (this.run.core.skill === "pulseSlash") {
+    player.skillCooldowns[slotIndex] = definition.cooldown * player.stats.skillCooldown;
+    if (skillId === "pulseSlash") {
       for (const enemy of this.enemies) {
         const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
         if (!enemy.dead && distance <= 190 + enemy.radius) {
@@ -778,15 +847,16 @@ export class Game {
         }
       }
       this.effects.push({ type: "pulseWave", x: player.x, y: player.y, angle: player.facing, radius: 390, life: 0.46, maxLife: 0.46, color: "#4df6ff" });
-    } else if (this.run.core.skill === "overdrive") {
+    } else if (skillId === "overdrive") {
       player.overdrive = 5;
       this.effects.push({ type: "overdriveAura", x: player.x, y: player.y, angle: player.facing, radius: 148, life: 0.5, maxLife: 0.5, color: "#b77dff" });
-    } else {
+    } else if (skillId === "barrier") {
       player.barrier = Math.max(player.barrier, 55);
       this.effects.push({ type: "barrierShell", x: player.x, y: player.y, angle: player.facing, radius: 126, life: 0.54, maxLife: 0.54, color: "#ffcc66" });
     }
-    audio.skill(this.run.core.skill);
+    audio.skill(skillId);
     this.spawnBurst(player.x, player.y, this.run.core.color, 22, 210);
+    return true;
   }
 
   requestDash() {
@@ -796,6 +866,8 @@ export class Game {
   start(coreId = "hunter", meta = {}) {
     audio.unlock();
     audio.startMusic();
+    this.blockInputs.clear();
+    this.resetWeaponWheelGesture();
     const core = CORES[coreId] || CORES.hunter;
     const maxHealth = 110 + (core.bonuses.health || 0) + Number(meta.armor || 0) * 8;
     const maxStamina = 100 + (core.bonuses.stamina || 0);
@@ -803,6 +875,7 @@ export class Game {
       coreId: core.id,
       core,
       weaponSlots: [core.weapon, "rail"],
+      skillSlots: [core.skill, null, null],
       elapsed: 0,
       spawnTimer: 0.55,
       kills: 0,
@@ -840,6 +913,7 @@ export class Game {
       comboQueued: false,
       activeWeaponSlot: WEAPON_SLOT_MELEE,
       pendingWeaponSlot: null,
+      activeSkillSlot: 1,
       blockHeld: false,
       parryTimer: 0,
       invulnerable: 0,
@@ -851,7 +925,7 @@ export class Game {
       maxAmmo: WEAPONS.rail.ammo,
       ammo: WEAPONS.rail.ammo,
       reloadTimer: 0,
-      skillCooldown: 0,
+      skillCooldowns: Array(SKILL_SLOT_COUNT).fill(0),
       barrier: 0,
       overdrive: 0,
       pulse: 0,
@@ -982,7 +1056,10 @@ export class Game {
     audio.stopMusic();
     this.state = "menu";
     this.keys.clear();
+    this.blockInputs.clear();
+    this.resetWeaponWheelGesture();
     this.setTouchVector(0, 0);
+    this.setBlocking(false);
     this.callbacks.onState?.("menu");
   }
 
@@ -1091,7 +1168,9 @@ export class Game {
     player.dashCooldown = Math.max(0, player.dashCooldown - dt);
     player.rangedCooldown = Math.max(0, player.rangedCooldown - dt);
     player.rangedPoseTimer = Math.max(0, player.rangedPoseTimer - dt);
-    player.skillCooldown = Math.max(0, player.skillCooldown - dt);
+    for (let index = 0; index < player.skillCooldowns.length; index += 1) {
+      player.skillCooldowns[index] = Math.max(0, player.skillCooldowns[index] - dt);
+    }
     player.parryTimer = Math.max(0, player.parryTimer - dt);
     player.staminaDelay = Math.max(0, player.staminaDelay - dt);
     player.overdrive = Math.max(0, player.overdrive - dt);
@@ -1170,6 +1249,9 @@ export class Game {
       player.stamina = Math.min(player.maxStamina, player.stamina + 31 * player.stats.staminaRegen * dt);
     }
     this.applyPendingWeaponSlot();
+    if (this.blockInputs.size > 0 && !player.blockHeld && player.action === "idle" && this.canGuard()) {
+      this.setBlocking(true);
+    }
   }
 
   startAttack(index) {
@@ -1373,6 +1455,8 @@ export class Game {
     this.player.x = GAME.width / 2;
     this.player.y = GAME.height / 2;
     this.player.action = "idle";
+    this.blockInputs.clear();
+    this.resetWeaponWheelGesture();
     this.player.blockHeld = false;
     this.player.rangedPoseTimer = 0;
     this.applyPendingWeaponSlot();
@@ -1718,6 +1802,7 @@ export class Game {
 
   breakGuard() {
     const player = this.player;
+    this.blockInputs.clear();
     player.stamina = 0;
     player.blockHeld = false;
     player.action = "broken";
@@ -1803,6 +1888,9 @@ export class Game {
     if (!this.run || this.state === "result") return;
     this.run.victory = victory;
     this.state = "result";
+    this.blockInputs.clear();
+    this.resetWeaponWheelGesture();
+    this.setBlocking(false);
     audio.endRun(victory);
     const coreEnergy = Math.max(1, Math.round((this.run.kills * 0.85 + this.run.energyEarned * 0.25 + (victory ? 55 : 0)) * (1 + this.run.metaRecovery * 0.06)));
     this.run.scrap = coreEnergy;
@@ -1826,6 +1914,20 @@ export class Game {
     const stage = MISSION_STAGES[displayStageIndex];
     const stageProgress = this.state === "room" ? 0 : clamp(this.run.stageDefeated / stage.enemies.length, 0, 1);
     const remainingTargets = Math.max(0, stage.enemies.length - this.run.stageDefeated);
+    const skills = this.run.skillSlots.map((skillId, index) => {
+      const definition = skillId ? SKILLS[skillId] : null;
+      const cooldown = player.skillCooldowns[index] || 0;
+      const duration = definition ? definition.cooldown * player.stats.skillCooldown : 1;
+      return {
+        slot: index + 1,
+        id: skillId,
+        name: definition?.name || "待装配",
+        color: definition?.color || "#52647a",
+        equipped: Boolean(definition),
+        active: player.activeSkillSlot === index + 1,
+        charge: definition ? 1 - clamp(cooldown / duration, 0, 1) : 0,
+      };
+    });
     this.callbacks.onHud?.({
       mission: this.state === "room" ? "ROOM" : this.run.mission,
       health: player.health,
@@ -1842,7 +1944,7 @@ export class Game {
       ammo: player.ammo,
       maxAmmo: player.maxAmmo,
       reload: player.reloadTimer,
-      skill: 1 - clamp(player.skillCooldown / (8 * player.stats.skillCooldown), 0, 1),
+      skills,
       action: player.action,
       weapons: [
         { slot: WEAPON_SLOT_MELEE, id: melee.id, name: melee.name, color: melee.color, asset: melee.asset, active: player.activeWeaponSlot === WEAPON_SLOT_MELEE },
