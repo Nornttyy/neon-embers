@@ -1,4 +1,4 @@
-import { assetUrl } from "./revision.js?v=67b2c11b0b75";
+import { assetUrl } from "./revision.js?v=__ASSET_REVISION__";
 
 export class AudioEngine {
   constructor() {

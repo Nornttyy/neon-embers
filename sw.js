@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "neon-embers-";
-const ASSET_REVISION = "67b2c11b0b75";
+const ASSET_REVISION = "__ASSET_REVISION__";
 const CACHE_VERSION = `${CACHE_PREFIX}${ASSET_REVISION}`;
 const PRECACHE_CONCURRENCY = 4;
 const versioned = (path) => `${path}?v=${ASSET_REVISION}`;
@@ -88,6 +88,8 @@ const ASSET_SHELL = [
   versioned("./assets/effects/skill-core.png"),
   versioned("./assets/effects/dash-arrival.png"),
   versioned("./assets/effects/execution-burst.png"),
+  versioned("./assets/effects/screen-success-overload.png"),
+  versioned("./assets/effects/screen-danger-fracture.png"),
   versioned("./assets/audio/swing-whoosh-1.wav"),
   versioned("./assets/audio/swing-whoosh-2.wav"),
   versioned("./assets/audio/bullet-impact.wav"),
