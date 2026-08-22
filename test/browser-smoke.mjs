@@ -429,8 +429,12 @@ try {
       press('r', true);
       const repeatSkillCycleIgnored = activeSkills();
       press('q');
-      await waitFrames();
-      const skillOneLabel = document.querySelector('[data-skill-slot="1"]').getAttribute('aria-label');
+      let skillOneLabel = '';
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        await waitFrames();
+        skillOneLabel = document.querySelector('[data-skill-slot="1"]').getAttribute('aria-label');
+        if (skillOneLabel.includes('冷却中')) break;
+      }
       const qKeepsWeapon = active();
       return {
         slots: chips.map((chip) => chip.dataset.slot),
