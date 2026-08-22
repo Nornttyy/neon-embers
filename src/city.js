@@ -6,6 +6,7 @@ const PLAYER_SPEED = 250;
 const DASH_SPEED = 720;
 const DASH_DURATION = 0.18;
 const DASH_COOLDOWN = 1.05;
+const CITY_CACHE_MAX_DPR = 1;
 
 const BUILDINGS = Object.freeze([
   Object.freeze({ x: 100, y: 100, w: 470, h: 330, name: "装备工坊", code: "WORKSHOP", color: "#aa72ff" }),
@@ -49,6 +50,11 @@ const TUTORIAL_STEPS = Object.freeze([
   Object.freeze({ title: "在城市中移动", text: "使用 WASD 或左侧摇杆移动球体。先走一小段，熟悉镜头跟随。", hint: "移动 120 米" }),
   Object.freeze({ title: "试一次闪避", text: "按空格或右侧“闪避”。闪避可以快速脱离危险。", hint: "完成 1 次闪避" }),
   Object.freeze({ title: "试一次攻击", text: "点击城市地面或按右侧“攻击”。进入战区后也是相同操作。", hint: "完成 1 次攻击" }),
+]);
+
+const STATIC_SCENE_IMAGE_KEYS = new Set([
+  "floorOuter", "floorRoom", "floorBlockade", "floorCore",
+  "barrier", "pylon", "vent", "sword", "pistol", "hammer", "energyCore",
 ]);
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -96,7 +102,7 @@ export class CityHub {
     this.staticScene.height = WORLD.height;
     this.staticSceneDpr = 0;
     this.staticSceneReady = false;
-    this.images = Object.fromEntries(Object.entries({
+    const cityImagePaths = {
       player: "assets/players/hunter-core.png",
       storm: "assets/players/storm-core.png",
       bastion: "assets/players/bastion-core.png",
@@ -113,10 +119,11 @@ export class CityHub {
       hammer: "assets/items/power-hammer.png",
       energyCore: "assets/items/energy-core.png",
       trainingDrone: "assets/enemies/shield-drone.png",
-      dashStreak: "assets/effects/dash-streak-hard.png",
-      bladeHit: "assets/effects/blade-hit.png",
       pulseWave: "assets/effects/pulse-wave.png",
-    }).map(([key, path]) => [key, this.loadImage(path)]));
+    };
+    this.staticAssetsPending = Object.keys(cityImagePaths).filter((key) => STATIC_SCENE_IMAGE_KEYS.has(key)).length;
+    this.staticAssetsReady = this.staticAssetsPending === 0;
+    this.images = Object.fromEntries(Object.entries(cityImagePaths).map(([key, path]) => [key, this.loadImage(key, path)]));
 
     this.onKeyDown = (event) => this.handleKey(event, true);
     this.onKeyUp = (event) => this.handleKey(event, false);
@@ -132,12 +139,23 @@ export class CityHub {
     this.resize();
   }
 
-  loadImage(path) {
+  loadImage(key, path) {
     const image = new Image();
-    image.addEventListener("load", () => {
-      this.staticSceneReady = false;
-      this.patterns.clear();
-    });
+    if (STATIC_SCENE_IMAGE_KEYS.has(key)) {
+      let settled = false;
+      const settleStaticAsset = () => {
+        if (settled) return;
+        settled = true;
+        this.staticAssetsPending = Math.max(0, this.staticAssetsPending - 1);
+        if (this.staticAssetsPending === 0) {
+          this.staticAssetsReady = true;
+          this.staticSceneReady = false;
+          this.patterns.clear();
+        }
+      };
+      image.addEventListener("load", settleStaticAsset, { once: true });
+      image.addEventListener("error", settleStaticAsset, { once: true });
+    }
     image.src = assetUrl(path);
     return image;
   }
@@ -186,7 +204,7 @@ export class CityHub {
       this.canvas.height = height;
     }
     this.view = { width: rect.width, height: rect.height, dpr };
-    if (this.staticSceneDpr !== dpr) this.staticSceneReady = false;
+    if (this.staticSceneDpr !== Math.min(CITY_CACHE_MAX_DPR, dpr)) this.staticSceneReady = false;
   }
 
   handleKey(event, down) {
@@ -371,19 +389,31 @@ export class CityHub {
   }
 
   drawWorld(ctx) {
-    if (!this.staticSceneReady) this.buildStaticScene();
-    ctx.drawImage(
-      this.staticScene,
-      0, 0, this.staticScene.width, this.staticScene.height,
-      0, 0, WORLD.width, WORLD.height,
-    );
+    if (this.staticAssetsReady) {
+      if (!this.staticSceneReady) this.buildStaticScene();
+      ctx.drawImage(
+        this.staticScene,
+        0, 0, this.staticScene.width, this.staticScene.height,
+        0, 0, WORLD.width, WORLD.height,
+      );
+    } else {
+      this.drawCityLoadingFallback(ctx);
+    }
     for (const npc of CITY_NPCS) this.drawNpc(ctx, npc);
     for (const facility of FACILITIES) this.drawFacility(ctx, facility);
     this.drawTrainingDummy(ctx);
   }
 
+  drawCityLoadingFallback(ctx) {
+    ctx.fillStyle = "#101827";
+    ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+    ctx.fillStyle = "rgba(77, 246, 255, .06)";
+    ctx.fillRect(0, 505, WORLD.width, 420);
+    ctx.fillRect(700, 0, 560, WORLD.height);
+  }
+
   buildStaticScene() {
-    const sceneDpr = this.view?.dpr || 1;
+    const sceneDpr = Math.min(CITY_CACHE_MAX_DPR, this.view?.dpr || 1);
     const pixelWidth = Math.round(WORLD.width * sceneDpr);
     const pixelHeight = Math.round(WORLD.height * sceneDpr);
     if (this.staticScene.width !== pixelWidth || this.staticScene.height !== pixelHeight) {
@@ -624,56 +654,45 @@ export class CityHub {
 
   drawPlayer(ctx) {
     const { x, y, facingX, facingY } = this.player;
-    const facing = Math.atan2(facingY, facingX);
     ctx.save();
     ctx.translate(x, y);
-    if (this.dashTime > 0 && this.images.dashStreak?.complete && this.images.dashStreak.naturalWidth) {
-      ctx.save();
-      ctx.rotate(facing);
-      const width = 190;
-      const height = width * this.images.dashStreak.naturalHeight / this.images.dashStreak.naturalWidth;
-      ctx.globalAlpha = .88;
-      ctx.drawImage(this.images.dashStreak, -width * .78, -height / 2, width, height);
-      ctx.restore();
-    }
-    ctx.fillStyle = "rgba(0, 0, 0, .5)";
+    const speedGlow = this.dashTime > 0 ? 1 : .35;
+    const aura = ctx.createRadialGradient(0, 0, 8, 0, 0, 58);
+    aura.addColorStop(0, `rgba(77,246,255,${.28 + speedGlow * .18})`);
+    aura.addColorStop(1, "rgba(77,246,255,0)");
+    ctx.fillStyle = aura;
+    ctx.fillRect(-60, -60, 120, 120);
+    ctx.fillStyle = "rgba(0,0,0,.45)";
     ctx.beginPath();
-    ctx.ellipse(7, 26, 38, 14, 0, 0, Math.PI * 2);
+    ctx.ellipse(5, 24, 34, 15, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (this.images.player.complete && this.images.player.naturalWidth) {
-      const width = 94;
-      const height = width * this.images.player.naturalHeight / this.images.player.naturalWidth;
-      ctx.shadowColor = "#4df6ff";
-      ctx.shadowBlur = this.dashTime > 0 ? 24 : 12;
-      ctx.drawImage(this.images.player, -width / 2, -height / 2, width, height);
-      ctx.shadowBlur = 0;
-    } else {
+    if (this.images.player.complete && this.images.player.naturalWidth) ctx.drawImage(this.images.player, -35, -35, 70, 70);
+    else {
       ctx.fillStyle = "#4df6ff";
       ctx.beginPath();
       ctx.arc(0, 0, PLAYER_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    const attackProgress = this.attackTime > 0 ? 1 - this.attackTime / .28 : 0;
-    ctx.save();
-    ctx.rotate(facing + Math.PI / 4 + (this.attackTime > 0 ? -1.1 + attackProgress * 2.2 : -.42));
-    if (this.images.sword?.complete && this.images.sword.naturalWidth) {
-      const size = this.attackTime > 0 ? 98 : 82;
-      ctx.shadowColor = "#4df6ff";
-      ctx.shadowBlur = 12;
-      ctx.drawImage(this.images.sword, 10, -size / 2, size, size);
-    }
-    ctx.restore();
+    ctx.strokeStyle = "rgba(230,255,255,.92)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(facingX * 24, facingY * 24);
+    ctx.lineTo(facingX * 43, facingY * 43);
+    ctx.stroke();
     if (this.attackTime > 0) {
-      const impact = this.images.bladeHit;
-      if (impact?.complete && impact.naturalWidth && attackProgress > .35 && attackProgress < .72) {
-        ctx.save();
-        ctx.translate(facingX * 82, facingY * 82);
-        ctx.rotate(facing);
-        ctx.globalAlpha = .85;
-        ctx.drawImage(impact, -38, -38, 76, 76);
-        ctx.restore();
-      }
+      const progress = 1 - this.attackTime / .28;
+      const base = Math.atan2(facingY, facingX);
+      ctx.strokeStyle = "rgba(77,246,255,.92)";
+      ctx.lineWidth = 8;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.arc(0, 0, 58, base - 1.3 + progress * .9, base + .4 + progress * .9);
+      ctx.stroke();
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.lineCap = "butt";
     }
     ctx.restore();
   }
