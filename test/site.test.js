@@ -480,7 +480,6 @@ test("0.9.7 removes the added full-screen edge flashes and keeps the original li
   assert.match(game, /this\.flash = this\.settings\.reduceFlash \? 0\.1 : 0\.4/);
   assert.match(game, /this\.flash = this\.settings\.reduceFlash \? 0\.06 : 0\.22/);
   assert.match(game, /if \(this\.flash > 0\)[\s\S]*?rgba\(255,70,110,\$\{this\.flash\}\)[\s\S]*?ctx\.fillRect/);
-  assert.match(html, /STAGE MISSION \/\/ 0\.9\.7/);
   assert.match(html, /<b>减少闪光<\/b><small>降低受伤闪白和局部高亮强度<\/small>/);
   assert.match(main, /profile\.settings\.reduceFlash = event\.target\.checked;[\s\S]*?game\.applySettings\(profile\.settings\);[\s\S]*?saveProfile\(\);/);
 });
@@ -636,9 +635,26 @@ test("HTML exposes manifest and install metadata", async () => {
   assert.match(html, /id="room-screen"/);
   assert.match(html, /id="room-grid"/);
   assert.match(html, /id="room-start-button"/);
-  assert.match(html, /STAGE MISSION \/\/ 0\.9\.7/);
+  assert.match(html, /NEON EMBERS \/\/ 0\.9\.8/);
   assert.doesNotMatch(html, /id="upgrade-screen"/);
   assert.doesNotMatch(html, /动作肉鸽/);
+});
+
+test("0.9.8 title screen exposes one enter-game action before the existing game flow", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const menu = html.match(/<section id="menu-screen"[\s\S]*?<\/section>/)?.[0] || "";
+
+  assert.equal([...menu.matchAll(/<button\b/g)].length, 1, "the title screen contains exactly one button");
+  assert.match(menu, /<button class="enter-game-button" id="start-button"[^>]*><span>进入游戏<\/span><\/button>/);
+  assert.doesNotMatch(menu, /settings-button|meta-button|guide-button|profile-strip|feature-rail/);
+  assert.match(html, /<nav class="core-tools"[\s\S]*?id="meta-button"[\s\S]*?id="guide-button"[\s\S]*?id="settings-button"/, "secondary utilities move behind the title entry");
+  assert.match(main, /showScreen\(profile\.guideSeen \? "core-screen" : "guide-screen"\)/, "entering preserves first-run guidance");
+  assert.doesNotMatch(main, /else if \(!profile\.guideSeen\)[\s\S]*?showScreen\("guide-screen"\)/, "the guide cannot replace the title before the player enters");
+  assert.match(styles, /\.title-lockup h1/);
+  assert.match(styles, /\.enter-game-button/);
+  assert.match(styles, /@keyframes title-enter/);
 });
 
 test("audio engine includes battle music lifecycle", async () => {

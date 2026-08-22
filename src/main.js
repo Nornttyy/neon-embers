@@ -61,9 +61,6 @@ const elements = {
   loadingFill: byId("loading-fill"),
   loadingStage: byId("loading-stage"),
   loadingPercent: byId("loading-percent"),
-  menuScrap: byId("menu-scrap"),
-  menuBestTime: byId("menu-best-time"),
-  menuBestKills: byId("menu-best-kills"),
   metaScrap: byId("meta-scrap"),
   coreGrid: byId("core-grid"),
   metaGrid: byId("meta-grid"),
@@ -199,9 +196,6 @@ function renderOfflineCacheProgress({ loaded = 0, total = 0, failed = [], ready 
 }
 
 function renderProfile() {
-  elements.menuScrap.textContent = profile.scrap;
-  elements.menuBestTime.textContent = formatTime(profile.bestTime);
-  elements.menuBestKills.textContent = profile.bestKills;
   elements.metaScrap.textContent = profile.scrap;
 }
 
@@ -434,7 +428,10 @@ function closeSettings() {
   showScreen(settingsReturnScreen || "menu-screen");
 }
 
-byId("start-button").addEventListener("click", () => { audio.unlock(); showScreen("core-screen"); });
+byId("start-button").addEventListener("click", () => {
+  audio.unlock();
+  showScreen(profile.guideSeen ? "core-screen" : "guide-screen");
+});
 byId("meta-button").addEventListener("click", () => { renderMeta(); showScreen("meta-screen"); });
 byId("guide-button").addEventListener("click", () => showScreen("guide-screen"));
 byId("guide-start-button").addEventListener("click", () => {
@@ -562,8 +559,6 @@ if (["127.0.0.1", "localhost"].includes(window.location.hostname)) {
 const previewCore = new URLSearchParams(window.location.search).get("autostart");
 if (previewCore && CORES[previewCore]) {
   window.setTimeout(() => beginRun(previewCore), 80);
-} else if (!profile.guideSeen) {
-  window.setTimeout(() => showScreen("guide-screen"), 280);
 }
 
 if ("serviceWorker" in navigator && (window.location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(window.location.hostname))) {
