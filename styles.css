@@ -922,7 +922,7 @@ kbd { padding: 4px 6px; border: 1px solid rgba(255,255,255,.15); background: rgb
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
 }
 
-/* 0.10.0 playable city hub */
+/* 0.10.1 asset-built playable city hub */
 .city-screen { padding: 0; overflow: hidden; background: #050914; }
 .city-screen::before, .city-screen::after { display: none; }
 .city-canvas { position: absolute; inset: 0; z-index: 0; display: block; width: 100%; height: 100%; touch-action: none; background: #050914; }
