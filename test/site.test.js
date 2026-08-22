@@ -13,7 +13,6 @@ const EFFECT_ART = [
   "guard-hit.png", "barrier-hit.png", "enemy-destroy.png", "pickup-collect.png", "enemy-shield.png",
   "dash-streak-hard.png", "boss-burst-hard.png", "energy-spark.png", "impact-shard.png",
   "combo-finisher.png", "parry-counter.png", "skill-core.png", "dash-arrival.png", "execution-burst.png",
-  "screen-success-overload.png", "screen-danger-fracture.png",
 ];
 const VFX_IMAGE_KEYS = [
   "guardField", "parryFlash", "guardBreak", "pulseWave", "overdriveAura", "barrierShell",
@@ -22,7 +21,6 @@ const VFX_IMAGE_KEYS = [
   "hammerHit", "railHit", "guardHit", "barrierHit", "enemyDestroy", "pickupCollect",
   "enemyShield", "dashStreak", "bossBurst", "energySpark", "impactShard",
   "comboFinisher", "parryCounter", "skillCore", "dashArrival", "executionBurst",
-  "screenSuccess", "screenDanger",
 ];
 const UPGRADE_ART = ["power-upgrade.png", "armor-upgrade.png", "recovery-upgrade.png"];
 const RETIRED_EFFECT_ART = ["slash-arc.png", "bullet-impact.png", "block-shield.png", "dash-streak.png", "boss-burst.png"];
@@ -76,8 +74,8 @@ test("service worker caches every required application module and generated spri
     return [...block.matchAll(/^\s+(?:versioned\()?"[^"\n]+"\)?[,]?$/gm)];
   };
   assert.equal(shellEntries("CORE_SHELL").length, 17);
-  assert.equal(shellEntries("ASSET_SHELL").length, 77);
-  assert.equal(shellEntries("CORE_SHELL").length + shellEntries("ASSET_SHELL").length, 94, "bounded installation retains the complete offline manifest");
+  assert.equal(shellEntries("ASSET_SHELL").length, 75);
+  assert.equal(shellEntries("CORE_SHELL").length + shellEntries("ASSET_SHELL").length, 92, "bounded installation retains the complete offline manifest");
   assert.match(worker, /const PRECACHE_CONCURRENCY = 4/);
   const concurrencyBlock = worker.match(/async function cacheWithConcurrency[\s\S]*?\n\}/)?.[0] || "";
   assert.match(concurrencyBlock, /while \(nextIndex < paths\.length\)/);
@@ -98,7 +96,7 @@ test("service worker caches every required application module and generated spri
   assert.doesNotMatch(worker, /Promise\.allSettled/, "the old unbounded optional-asset fanout is retired");
 });
 
-test("asset loading decodes, composites, and prewarms every VFX image before becoming ready", async () => {
+test("asset loading decodes and prewarms every VFX image before becoming ready", async () => {
   const game = await readFile(new URL("../src/game.js", import.meta.url), "utf8");
   const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
   assert.match(game, /MAX_ASSET_LOAD_ATTEMPTS = 3/);
@@ -112,30 +110,14 @@ test("asset loading decodes, composites, and prewarms every VFX image before bec
     "every runtime VFX image is included in the prewarm allowlist",
   );
   assert.match(game, /this\.vfxWarmState = \{ ready: false, warmed: 0, total: VFX_IMAGE_KEYS\.length, failed: \[\] \}/);
-  assert.match(game, /this\.screenOverlaySpriteState = \{ ready: false, prepared: 0, warmed: 0, total: Object\.keys\(SCREEN_FLASH_PRESETS\)\.length \* 2, failed: \[\] \}/);
-  const compositePrepareBlock = game.match(/\n  async prepareScreenOverlaySprites\(\) \{([\s\S]*?)\n  \}\n\n  runScreenOverlaySpriteWarmPass\(/)?.[1] || "";
-  const compositeWarmPassBlock = game.match(/\n  runScreenOverlaySpriteWarmPass\(\) \{([\s\S]*?)\n  \}\n\n  async warmScreenOverlaySprites\(/)?.[1] || "";
-  const compositeWarmBlock = game.match(/\n  async warmScreenOverlaySprites\(\) \{([\s\S]*?)\n  \}\n\n  runVfxWarmPass\(/)?.[1] || "";
-  assert.match(compositePrepareBlock, /Object\.entries\(SCREEN_FLASH_PRESETS\)/, "all ten event presets receive their own composite");
-  assert.match(compositePrepareBlock, /\[false, true\]/, "normal and reduced-flash variants are both prepared");
-  assert.match(compositePrepareBlock, /surface\.width = image\.naturalWidth/);
-  assert.match(compositePrepareBlock, /surface\.height = image\.naturalHeight/, "event composites retain the source material resolution");
-  assert.match(compositePrepareBlock, /clamp\(tintPeak \/ edgePeak, 0, 1\)/, "each event preserves its exact tint-to-edge intensity ratio");
-  assert.match(compositePrepareBlock, /context\.drawImage\(image, 0, 0\)/);
-  assert.match(compositeWarmPassBlock, /const context = this\.ctx/, "event composites are submitted on the real game Canvas");
-  assert.match(compositeWarmPassBlock, /context\.globalCompositeOperation = "source-over"/);
-  assert.match(compositeWarmPassBlock, /context\.drawImage\(sprite, x, y, width, height\)/);
-  assert.doesNotMatch(compositeWarmPassBlock, /clearRect/, "all event composites remain present through the warm submission");
-  assert.match(compositeWarmBlock, /await this\.waitForAnimationFrames\(3\)/);
-  const passBlock = game.match(/\n  runVfxWarmPass\(composite, warmedKeys\) \{([\s\S]*?)\n  \}\n\n  runScreenOverlayWarmPass\(/)?.[1] || "";
-  const overlayPassBlock = game.match(/\n  runScreenOverlayWarmPass\(imageKey, composite, warmedKeys\) \{([\s\S]*?)\n  \}\n\n  async warmVfxImages\(/)?.[1] || "";
+  const passBlock = game.match(/\n  runVfxWarmPass\(composite, warmedKeys\) \{([\s\S]*?)\n  \}\n\n  async warmVfxImages\(/)?.[1] || "";
   const warmBlock = game.match(/\n  async warmVfxImages\(\) \{([\s\S]*?)\n  \}\n\n  bindInput\(/)?.[1] || "";
   assert.match(passBlock, /const context = this\.ctx/, "VFX textures are warmed on the real game Canvas");
   assert.doesNotMatch(game, /createVfxWarmSurface|OffscreenCanvas/, "a detached surface cannot warm the game Canvas");
   assert.match(passBlock, /context\.globalAlpha = 0\.25/, "prewarm draws remain non-zero for GPU submission");
   assert.match(passBlock, /context\.globalCompositeOperation = composite/);
   assert.match(game, /const VFX_WARM_COLUMNS = 7/);
-  assert.match(game, /const VFX_WARM_ROWS = 6/);
+  assert.match(game, /const VFX_WARM_ROWS = 5/);
   assert.match(passBlock, /column = index % VFX_WARM_COLUMNS/);
   assert.match(passBlock, /row = Math\.floor\(index \/ VFX_WARM_COLUMNS\)/);
   assert.match(passBlock, /context\.drawImage\(image, x, y, width, height\)/);
@@ -151,28 +133,12 @@ test("asset loading decodes, composites, and prewarms every VFX image before bec
   const glowSettleIndex = warmBlock.indexOf("await this.waitForAnimationFrames(3);", glowPassIndex);
   const screenPassIndex = warmBlock.indexOf('await this.runVfxWarmPass("screen", warmedKeys);');
   const screenSettleIndex = warmBlock.indexOf("await this.waitForAnimationFrames(3);", screenPassIndex);
-  const successOverlayIndex = warmBlock.indexOf('await this.runScreenOverlayWarmPass("screenSuccess", "screen", warmedKeys);');
-  const successOverlaySettleIndex = warmBlock.indexOf("await this.waitForAnimationFrames(3);", successOverlayIndex);
-  const dangerOverlayIndex = warmBlock.indexOf('await this.runScreenOverlayWarmPass("screenDanger", "source-over", warmedKeys);');
-  const dangerOverlaySettleIndex = warmBlock.indexOf("await this.waitForAnimationFrames(3);", dangerOverlayIndex);
   assert.ok(
     sourcePassIndex >= 0 && sourcePassIndex < sourceSettleIndex
       && sourceSettleIndex < glowPassIndex && glowPassIndex < glowSettleIndex
-      && glowSettleIndex < screenPassIndex && screenPassIndex < screenSettleIndex
-      && screenSettleIndex < successOverlayIndex && successOverlayIndex < successOverlaySettleIndex
-      && successOverlaySettleIndex < dangerOverlayIndex && dangerOverlayIndex < dangerOverlaySettleIndex,
-    "grid composites and both full-screen overlay textures each remain submitted for three animation frames",
+      && glowSettleIndex < screenPassIndex && screenPassIndex < screenSettleIndex,
+    "all three VFX blend pipelines remain submitted for three animation frames",
   );
-  assert.match(overlayPassBlock, /const context = this\.ctx/, "screen overlays warm on the real game Canvas");
-  assert.match(overlayPassBlock, /context\.resetTransform\(\)/);
-  assert.match(overlayPassBlock, /context\.globalAlpha = 0\.25/);
-  assert.match(overlayPassBlock, /context\.globalCompositeOperation = composite/);
-  assert.match(overlayPassBlock, /const width = Math\.max\(1, \(this\.canvas\.width - 2\) \* 1\.24\)/);
-  assert.match(overlayPassBlock, /const height = Math\.max\(1, \(this\.canvas\.height - 2\) \* 1\.24\)/);
-  assert.match(overlayPassBlock, /context\.drawImage\(image, \(this\.canvas\.width - width\) \/ 2, \(this\.canvas\.height - height\) \/ 2, width, height\)/);
-  assert.match(overlayPassBlock, /warmedKeys\.add\(imageKey\)/);
-  assert.ok([...overlayPassBlock.matchAll(/warmedKeys\.delete\(imageKey\)/g)].length >= 2, "failed full-screen submissions cannot remain counted as warm");
-  assert.match(overlayPassBlock, /requestAnimationFrame\(drawOverlay\)/);
   for (const phase of ["images", "sprite-filters", "sprite-warm", "vfx-source", "vfx-lighter", "vfx-screen", "ready"]) {
     assert.match(game, new RegExp(`emitLoadProgress\\(\"${phase}\"`), `loading reports the ${phase} phase`);
   }
@@ -491,115 +457,32 @@ test("combat art uses endpoint-sampled dynamic weapon trails without static slas
   assert.match(effectRenderBlock, /drawKeyframedSprite\(ctx, effect\.type, effect, effect\.radius/);
 });
 
-test("0.9.6 keeps one throttled, reduced-intensity full-screen feedback channel", async () => {
+test("0.9.7 removes the added full-screen edge flashes and keeps the original light feedback", async () => {
   const game = await readFile(new URL("../src/game.js", import.meta.url), "utf8");
   const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
-  const block = (name, next) => game.match(new RegExp(`\\n  ${name}\\([^)]*\\) \\{([\\s\\S]*?)\\n  \\}\\n\\n  ${next}\\(`))?.[1] || "";
+  const worker = await readFile(new URL("../sw.js", import.meta.url), "utf8");
 
-  assert.match(game, /const SCREEN_FLASH_MIN_INTERVAL = 0\.34/);
-  assert.match(game, /const SCREEN_FLASH_REPEAT_INTERVAL = 0\.16/);
-  assert.match(game, /const SCREEN_FLASH_REDUCED_SCALE = 0\.24/);
-  assert.match(game, /const SCREEN_FLASH_OVERSCAN = 1\.12/);
-  const presets = game.match(/const SCREEN_FLASH_PRESETS = Object\.freeze\(\{([\s\S]*?)\n\}\);/)?.[1] || "";
-  for (const kind of ["dash", "combo", "skill", "parry", "execution", "hurt", "guardBreak", "boss", "lethal", "victory"]) {
-    assert.match(presets, new RegExp(`${kind}: Object\\.freeze`), `${kind} has an explicit screen-feedback preset`);
+  for (const retired of [
+    "SCREEN_FLASH_PRESETS", "screenPulse10", "screenPulseReduced10", "screenFlash",
+    "triggerScreenFlash", "updateScreenFlash", "renderScreenFlash", "screenOverlaySprites",
+    "screen-success-overload.png", "screen-danger-fracture.png",
+  ]) {
+    assert.doesNotMatch(game, new RegExp(retired.replaceAll(".", "\\.")), `${retired} is removed from runtime code`);
   }
-  for (const kind of ["dash", "combo", "skill", "parry", "victory"]) {
-    assert.match(presets, new RegExp(`${kind}: Object\\.freeze\\(\\{ family: "success"`), `${kind} uses the cyan-violet success family`);
-  }
-  for (const kind of ["execution", "hurt", "guardBreak", "boss", "lethal"]) {
-    assert.match(presets, new RegExp(`${kind}: Object\\.freeze\\(\\{ family: "danger"`), `${kind} uses the red-violet danger family`);
-  }
-  assert.match(presets, /parry: Object\.freeze\(\{ family: "success", priority: 94/);
-  assert.match(presets, /execution: Object\.freeze\(\{ family: "danger", priority: 92/);
+  assert.doesNotMatch(worker, /screen-(?:success-overload|danger-fracture)\.png/);
+  assert.doesNotMatch(main, /screen-composites|screen-composite-warm|合成全屏反馈|提交全屏反馈/);
+  assert.doesNotMatch(styles, /combat-overlay-reveal/);
 
-  assert.match(game, /this\.screenFlash = null/);
-  assert.match(game, /this\.screenFlashLastByKind = Object\.create\(null\)/);
-  assert.doesNotMatch(game, /this\.screenFlashes|screenFlash\.push\(/, "screen feedback remains a singleton, never an effect array");
-  assert.doesNotMatch(game, /this\.flash\b/, "the old untyped red scalar overlay is retired");
-  assert.match(game, /screenSuccess: "assets\/effects\/screen-success-overload\.png"/);
-  assert.match(game, /screenDanger: "assets\/effects\/screen-danger-fracture\.png"/);
-
-  const pulseFrames = game.match(/screenPulse10\s*:\s*Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || "";
-  assert.equal([...pulseFrames.matchAll(/\bat\s*:/g)].length, 10, "the full-screen pulse uses ten timed poses");
-  assert.equal([...pulseFrames.matchAll(/\bscale\s*:/g)].length, 10);
-  assert.equal([...pulseFrames.matchAll(/\balpha\s*:/g)].length, 10);
-  assert.equal([...pulseFrames.matchAll(/\brotation\s*:/g)].length, 10);
-  const reducedPulseFrames = game.match(/screenPulseReduced10\s*:\s*Object\.freeze\(\[([\s\S]*?)\]\)/)?.[1] || "";
-  const reducedPulseAlphas = [...reducedPulseFrames.matchAll(/\balpha\s*:\s*([\d.]+)/g)].map((match) => Number(match[1]));
-  assert.equal([...reducedPulseFrames.matchAll(/\bat\s*:/g)].length, 10, "reduced flash has its own ten-pose track");
-  assert.equal(reducedPulseAlphas.length, 10);
-  const reducedPeak = Math.max(...reducedPulseAlphas);
-  const reducedPeakIndex = reducedPulseAlphas.indexOf(reducedPeak);
-  assert.ok(reducedPeakIndex > 0 && reducedPeakIndex < reducedPulseAlphas.length - 1, "reduced flash has one early peak");
-  assert.equal(reducedPulseAlphas.filter((alpha) => alpha === reducedPeak).length, 1, "reduced flash has a single peak rather than repeated pulses");
-  for (let index = 1; index <= reducedPeakIndex; index += 1) assert.ok(reducedPulseAlphas[index] >= reducedPulseAlphas[index - 1]);
-  for (let index = reducedPeakIndex + 1; index < reducedPulseAlphas.length; index += 1) assert.ok(reducedPulseAlphas[index] <= reducedPulseAlphas[index - 1]);
-
-  const triggerBlock = block("triggerScreenFlash", "updateScreenFlash");
-  assert.match(triggerBlock, /const current = this\.screenFlash\?\.life > 0 \? this\.screenFlash : null/);
-  assert.match(triggerBlock, /now - lastSameKind < SCREEN_FLASH_REPEAT_INTERVAL/);
-  assert.match(triggerBlock, /preset\.priority < current\.priority/);
-  assert.match(triggerBlock, /const insideGlobalCooldown = now < \(Number\(this\.screenFlashNextAt\) \|\| 0\)/);
-  assert.match(triggerBlock, /const progress = clamp\(1 - current\.life \/ current\.maxLife, 0, 1\)/);
-  assert.match(triggerBlock, /current\.life = preset\.duration \* \(1 - progress\)/, "a higher-priority cooldown upgrade preserves normalized progress");
-  assert.match(triggerBlock, /this\.screenFlashNextAt = now \+ SCREEN_FLASH_MIN_INTERVAL/);
-  assert.match(triggerBlock, /this\.screenFlash = \{/);
-  assert.doesNotMatch(triggerBlock, /\.push\(/);
-
-  const updateBlock = block("updateScreenFlash", "setTouchVector");
-  assert.match(updateBlock, /this\.screenFlashClock = \(Number\(this\.screenFlashClock\) \|\| 0\) \+ dt/);
-  assert.match(updateBlock, /this\.screenFlash\.life = Math\.max\(0, this\.screenFlash\.life - dt\)/);
-  assert.match(updateBlock, /if \(this\.screenFlash\.life <= 0\) this\.screenFlash = null/);
-
-  const renderBlock = block("renderScreenFlash", "renderMenuBackground");
-  assert.match(renderBlock, /const reduced = this\.settings\.reduceFlash/);
-  assert.match(renderBlock, /const frames = reduced \? VFX_KEYFRAMES\.screenPulseReduced10 : VFX_KEYFRAMES\.screenPulse10/);
-  assert.match(renderBlock, /sampleKeyframes\(frames, progress\)/);
-  assert.match(renderBlock, /const reducedScale = reduced \? SCREEN_FLASH_REDUCED_SCALE : 1/);
-  assert.match(renderBlock, /success \? "screenSuccess" : "screenDanger"/);
-  assert.match(renderBlock, /this\.screenOverlaySprites\[screenOverlaySpriteKey\(effect\.kind, reduced\)\]/);
-  assert.match(renderBlock, /success \? "#4df6ff" : "#ff2e67"/, "the base tint distinguishes cyan success from red danger");
-  assert.match(renderBlock, /ctx\.globalCompositeOperation = compositeSprite \? "source-over" : success \? "screen" : "source-over"/, "prepared event sprites collapse both full-screen passes into one source-over draw while retaining a source-image fallback");
-  assert.match(renderBlock, /reduced \? Math\.min\(0\.02, effect\.tintAlpha \* reducedScale\)/, "reduced full-screen tint is capped at 0.02");
-  assert.match(renderBlock, /reduced \? Math\.min\(0\.1, effect\.edgeAlpha \* reducedScale\)/, "reduced edge material is capped at 0.1");
-  assert.match(renderBlock, /this\.view\.width \* frame\.scale \* SCREEN_FLASH_OVERSCAN/);
-  assert.match(renderBlock, /this\.view\.height \* frame\.scale \* SCREEN_FLASH_OVERSCAN/);
-  assert.match(renderBlock, /ctx\.drawImage\(drawable, -width \/ 2, -height \/ 2, width, height\)/);
-  assert.doesNotMatch(renderBlock, /shadowBlur|ctx\.filter|create(?:Linear|Radial)Gradient|getImageData|createElement/, "the runtime overlay avoids blur/filter compilation, readback, gradients, and temporary surfaces");
-  const mainRenderBlock = block("render", "renderScreenFlash");
-  assert.ok(
-    mainRenderBlock.indexOf("ctx.restore();") < mainRenderBlock.indexOf("this.renderScreenFlash(ctx);")
-      && mainRenderBlock.indexOf("this.renderScreenFlash(ctx);") < mainRenderBlock.indexOf("this.renderCrosshair(ctx)"),
-    "the singleton overlay is screen-space feedback while the crosshair remains legible above it",
-  );
-
-  const requestSkillBlock = block("requestSkill", "requestDash");
-  assert.match(requestSkillBlock, /this\.triggerScreenFlash\("skill"\)/);
-  const updatePlayerBlock = block("updatePlayer", "startAttack");
-  assert.match(updatePlayerBlock, /dashArrived[\s\S]*?this\.triggerScreenFlash\("dash"\)/);
-  const updateSpawningBlock = block("updateSpawning", "completeMissionStage");
-  assert.match(updateSpawningBlock, /type === "boss"[\s\S]*?this\.triggerScreenFlash\("boss"\)/);
-  const damageEnemyBlock = block("damageEnemy", "killEnemy");
-  assert.match(damageEnemyBlock, /if \(comboFinisher\) this\.triggerScreenFlash\("combo"\)/, "ordinary weapon contact does not flash the whole screen");
-  const killEnemyBlock = block("killEnemy", "damagePlayer");
-  assert.match(killEnemyBlock, /if \(enemy\.boss\) this\.triggerScreenFlash\("victory"\)/);
-  assert.match(killEnemyBlock, /else if \(finisher\) this\.triggerScreenFlash\("execution"\)/, "ordinary non-finisher kills stay local");
-  const damagePlayerBlock = block("damagePlayer", "applyHealthDamage");
-  assert.match(damagePlayerBlock, /player\.parryTimer > 0[\s\S]*?this\.triggerScreenFlash\("parry"\)/);
-  const healthBlock = block("applyHealthDamage", "breakGuard");
-  assert.match(healthBlock, /this\.triggerScreenFlash\(player\.health <= 0 \? "lethal" : "hurt"\)/);
-  const guardBreakBlock = block("breakGuard", "updatePickups");
-  assert.match(guardBreakBlock, /this\.triggerScreenFlash\("guardBreak"\)/);
-
-  assert.match(html, /<b>减少闪光<\/b><small>降低全屏闪光与边缘脉冲强度<\/small>/);
+  assert.match(game, /this\.flash = 0/);
+  assert.match(game, /this\.flash = Math\.max\(0, this\.flash - dt \* 4\.5\)/);
+  assert.match(game, /this\.flash = this\.settings\.reduceFlash \? 0\.1 : 0\.4/);
+  assert.match(game, /this\.flash = this\.settings\.reduceFlash \? 0\.06 : 0\.22/);
+  assert.match(game, /if \(this\.flash > 0\)[\s\S]*?rgba\(255,70,110,\$\{this\.flash\}\)[\s\S]*?ctx\.fillRect/);
+  assert.match(html, /STAGE MISSION \/\/ 0\.9\.7/);
+  assert.match(html, /<b>减少闪光<\/b><small>降低受伤闪白和局部高亮强度<\/small>/);
   assert.match(main, /profile\.settings\.reduceFlash = event\.target\.checked;[\s\S]*?game\.applySettings\(profile\.settings\);[\s\S]*?saveProfile\(\);/);
-  assert.match(styles, /#room-screen\.is-active,\s*#result-screen\.is-active\s*\{[\s\S]*?animation:\s*combat-overlay-reveal \.3s/);
-  const revealFrames = styles.match(/@keyframes combat-overlay-reveal\s*\{([\s\S]*?)\n\}/)?.[1] || "";
-  assert.match(revealFrames, /0%, 38%\s*\{\s*opacity:\s*0/);
-  assert.match(revealFrames, /100%\s*\{\s*opacity:\s*1/);
 });
 
 test("runtime hit, dash, and skill rendering uses full-resolution prefiltered sprite caches", async () => {
@@ -692,7 +575,7 @@ test("arena floor, props, and boundary are rendered once into one DPR-aware stat
   assert.ok(showIndex >= 0 && showIndex < prepareIndex && prepareIndex < beginIndex && beginIndex < stageHideIndex, "stage input remains blocked until the target arena cache is ready");
 });
 
-test("lightweight loading screen gates assets, composites, VFX, filtered sprites, arena, and run audio without waiting for offline caching", async () => {
+test("lightweight loading screen gates assets, VFX, filtered sprites, arena, and run audio without waiting for offline caching", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
   const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
@@ -704,11 +587,9 @@ test("lightweight loading screen gates assets, composites, VFX, filtered sprites
   assert.doesNotMatch(styles.match(/\.loading-screen\s*\{([\s\S]*?)\n\}/)?.[1] || "", /url\(|backdrop-filter/, "loading presentation stays CSS-only and lightweight");
   assert.match(main, /completed = Math\.min\(total, loaded \+ failedCount\)/, "failed assets still advance an exact completed/total counter");
   assert.match(main, /setLoadingStatus\(`读取战斗素材 \$\{completed\}\/\$\{total\}`/);
-  for (const phase of ["sprite-filters", "sprite-warm", "screen-composites", "screen-composite-warm", "vfx-source", "vfx-lighter", "vfx-screen", "arena-cache", "ready"]) assert.match(main, new RegExp(`phase === "${phase}"`));
+  for (const phase of ["sprite-filters", "sprite-warm", "vfx-source", "vfx-lighter", "vfx-screen", "arena-cache", "ready"]) assert.match(main, new RegExp(`phase === "${phase}"`));
   assert.match(main, /生成受击与动作材质 \$\{prepared\}\/\$\{phaseTotal\}/);
   assert.match(main, /setLoadingStatus\("提交角色材质"/);
-  assert.match(main, /setLoadingStatus\("合成全屏反馈"/);
-  assert.match(main, /setLoadingStatus\("提交全屏反馈"/);
   assert.match(main, /setLoadingStatus\("构建完整战区"/);
   assert.match(main, /function renderOfflineCacheProgress/);
   assert.match(main, /建立离线战斗缓存 \$\{completed\}\/\$\{offlineCacheState\.total\}/);
@@ -726,7 +607,7 @@ test("lightweight loading screen gates assets, composites, VFX, filtered sprites
   assert.equal(main.indexOf('navigator.serviceWorker.register("./sw.js"'), registerIndex, "there is no competing eager registration");
   const initialReadyBlock = main.match(/game\.assetsReady\.then\(\(\) => \{([\s\S]*?)\n\}\);/)?.[1] || "";
   const initialHideIndex = initialReadyBlock.indexOf("hideLoadingScreen();");
-  assert.ok(initialHideIndex >= 0, "the initial loader hides as soon as decoded assets, filtered sprites, screen composites, and VFX warm passes are ready");
+  assert.ok(initialHideIndex >= 0, "the initial loader hides as soon as decoded assets, filtered sprites, and VFX warm passes are ready");
   assert.doesNotMatch(initialReadyBlock, /await/, "initial runtime readiness does not wait on background installation");
   const runBlock = main.match(/async function beginRun\(coreId\) \{([\s\S]*?)\n\}\n\nasync function beginPreparedStage/)?.[1] || "";
   const assetsIndex = runBlock.indexOf("await game.assetsReady;");
@@ -755,7 +636,7 @@ test("HTML exposes manifest and install metadata", async () => {
   assert.match(html, /id="room-screen"/);
   assert.match(html, /id="room-grid"/);
   assert.match(html, /id="room-start-button"/);
-  assert.match(html, /STAGE MISSION \/\/ 0\.9\.6/);
+  assert.match(html, /STAGE MISSION \/\/ 0\.9\.7/);
   assert.doesNotMatch(html, /id="upgrade-screen"/);
   assert.doesNotMatch(html, /动作肉鸽/);
 });

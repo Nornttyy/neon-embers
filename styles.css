@@ -352,16 +352,6 @@ h1 span { color: var(--cyan); }
   backdrop-filter: blur(12px);
 }
 
-#room-screen.is-active,
-#result-screen.is-active {
-  animation: combat-overlay-reveal .3s cubic-bezier(.2, .75, .25, 1) both;
-}
-
-@keyframes combat-overlay-reveal {
-  0%, 38% { opacity: 0; }
-  100% { opacity: 1; }
-}
-
 .panel-shell {
   position: relative;
   width: min(560px, 100%);
