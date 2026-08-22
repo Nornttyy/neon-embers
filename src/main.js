@@ -54,6 +54,11 @@ const allScreens = [...document.querySelectorAll(".screen")];
 const hud = byId("hud");
 const touchControls = byId("touch-controls");
 const coarsePointer = window.matchMedia("(pointer: coarse)");
+const cityShell = byId("city-shell");
+const tutorialDialog = byId("city-tutorial");
+const tutorialSteps = [...document.querySelectorAll("[data-tutorial-step]")];
+const tutorialProgress = [...document.querySelectorAll(".tutorial-progress i")];
+let tutorialStep = 0;
 
 const elements = {
   loadingScreen: byId("loading-screen"),
@@ -197,6 +202,43 @@ function renderOfflineCacheProgress({ loaded = 0, total = 0, failed = [], ready 
 
 function renderProfile() {
   elements.metaScrap.textContent = profile.scrap;
+}
+
+function renderTutorialStep() {
+  tutorialSteps.forEach((step, index) => {
+    const active = index === tutorialStep;
+    step.classList.toggle("is-active", active);
+    step.setAttribute("aria-hidden", String(!active));
+  });
+  tutorialProgress.forEach((marker, index) => marker.classList.toggle("is-active", index === tutorialStep));
+  byId("tutorial-next").querySelector("span").textContent = tutorialStep === tutorialSteps.length - 1
+    ? "完成，回到城市"
+    : "下一步";
+}
+
+function openTutorial() {
+  tutorialStep = 0;
+  renderTutorialStep();
+  cityShell.inert = true;
+  tutorialDialog.hidden = false;
+  window.setTimeout(() => byId("tutorial-next").focus(), 0);
+}
+
+function finishTutorial(message = "教学完成，可以在城市中自由准备") {
+  profile.guideSeen = true;
+  saveProfile();
+  cityShell.inert = false;
+  tutorialDialog.hidden = true;
+  byId("city-mission-button").focus();
+  showToast(message);
+}
+
+function enterCity({ promptTutorial = true } = {}) {
+  renderProfile();
+  showScreen("city-screen");
+  cityShell.inert = false;
+  tutorialDialog.hidden = true;
+  if (promptTutorial && !profile.guideSeen) openTutorial();
 }
 
 function renderCoreCards() {
@@ -409,14 +451,13 @@ async function beginPreparedStage() {
   hideLoadingScreen();
 }
 
-function returnToMenu() {
+function returnToCity() {
   game.stop();
-  renderProfile();
-  showScreen("menu-screen");
+  enterCity({ promptTutorial: false });
 }
 
 function openSettings() {
-  settingsReturnScreen = currentScreen === "game" ? "menu-screen" : currentScreen;
+  settingsReturnScreen = currentScreen === "game" ? "city-screen" : currentScreen;
   byId("volume-input").value = profile.settings.volume;
   byId("music-volume-input").value = profile.settings.musicVolume;
   byId("shake-input").checked = profile.settings.shake;
@@ -425,29 +466,31 @@ function openSettings() {
 }
 
 function closeSettings() {
-  showScreen(settingsReturnScreen || "menu-screen");
+  if (!settingsReturnScreen || settingsReturnScreen === "city-screen") enterCity();
+  else showScreen(settingsReturnScreen);
 }
 
 byId("start-button").addEventListener("click", () => {
   audio.unlock();
-  showScreen(profile.guideSeen ? "core-screen" : "guide-screen");
+  enterCity();
 });
+byId("city-mission-button").addEventListener("click", () => showScreen("core-screen"));
 byId("meta-button").addEventListener("click", () => { renderMeta(); showScreen("meta-screen"); });
-byId("guide-button").addEventListener("click", () => showScreen("guide-screen"));
-byId("guide-start-button").addEventListener("click", () => {
-  profile.guideSeen = true;
-  saveProfile();
-  showScreen("core-screen");
+byId("guide-button").addEventListener("click", openTutorial);
+byId("tutorial-next").addEventListener("click", () => {
+  if (tutorialStep < tutorialSteps.length - 1) {
+    tutorialStep += 1;
+    renderTutorialStep();
+    return;
+  }
+  finishTutorial();
 });
+byId("tutorial-skip").addEventListener("click", () => finishTutorial("已跳过教学，可从训练中心随时重看"));
 byId("settings-button").addEventListener("click", openSettings);
 byId("settings-close").addEventListener("click", closeSettings);
 
 for (const button of document.querySelectorAll("[data-back]")) {
   button.addEventListener("click", () => {
-    if (currentScreen === "guide-screen") {
-      profile.guideSeen = true;
-      saveProfile();
-    }
     showScreen(button.dataset.back);
   });
 }
@@ -496,12 +539,12 @@ byId("reset-save-button").addEventListener("click", (event) => {
 
 byId("pause-button").addEventListener("click", () => game.pause(true));
 byId("room-start-button").addEventListener("click", () => { void beginPreparedStage(); });
-byId("room-exit-button").addEventListener("click", returnToMenu);
+byId("room-exit-button").addEventListener("click", returnToCity);
 byId("resume-button").addEventListener("click", () => game.resume());
 byId("restart-button").addEventListener("click", () => beginRun(profile.lastCore));
-byId("quit-button").addEventListener("click", returnToMenu);
+byId("quit-button").addEventListener("click", returnToCity);
 byId("again-button").addEventListener("click", () => beginRun(profile.lastCore));
-byId("result-menu-button").addEventListener("click", returnToMenu);
+byId("result-menu-button").addEventListener("click", returnToCity);
 const joystickZone = byId("joystick-zone");
 const joystickKnob = byId("joystick-knob");
 let joystickPointer = null;
@@ -553,7 +596,7 @@ renderProfile();
 void adService.isAvailable();
 
 if (["127.0.0.1", "localhost"].includes(window.location.hostname)) {
-  window.__NEON_DEBUG__ = { game, beginRun, audio };
+  window.__NEON_DEBUG__ = { game, beginRun, enterCity, openTutorial, audio };
 }
 
 const previewCore = new URLSearchParams(window.location.search).get("autostart");

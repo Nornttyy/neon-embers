@@ -566,7 +566,7 @@ test("arena floor, props, and boundary are rendered once into one DPR-aware stat
   const roomCacheIndex = runBlock.indexOf("await game.arenaReady;");
   const hideIndex = runBlock.indexOf("hideLoadingScreen();");
   assert.ok(startIndex >= 0 && startIndex < roomCacheIndex && roomCacheIndex < hideIndex, "the room is revealed only after its full-world cache is submitted");
-  const stageBlock = main.match(/async function beginPreparedStage\(\) \{([\s\S]*?)\n\}\n\nfunction returnToMenu/)?.[1] || "";
+  const stageBlock = main.match(/async function beginPreparedStage\(\) \{([\s\S]*?)\n\}\n\nfunction returnToCity/)?.[1] || "";
   const showIndex = stageBlock.indexOf("showLoadingScreen");
   const prepareIndex = stageBlock.indexOf("await game.prepareArenaCache");
   const beginIndex = stageBlock.indexOf("game.beginStage()");
@@ -635,12 +635,12 @@ test("HTML exposes manifest and install metadata", async () => {
   assert.match(html, /id="room-screen"/);
   assert.match(html, /id="room-grid"/);
   assert.match(html, /id="room-start-button"/);
-  assert.match(html, /NEON EMBERS \/\/ 0\.9\.8/);
+  assert.match(html, /NEON EMBERS \/\/ 0\.9\.9/);
   assert.doesNotMatch(html, /id="upgrade-screen"/);
   assert.doesNotMatch(html, /动作肉鸽/);
 });
 
-test("0.9.8 title screen exposes one enter-game action before the existing game flow", async () => {
+test("title screen keeps one enter-game action before the city hub", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
   const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
@@ -649,12 +649,38 @@ test("0.9.8 title screen exposes one enter-game action before the existing game 
   assert.equal([...menu.matchAll(/<button\b/g)].length, 1, "the title screen contains exactly one button");
   assert.match(menu, /<button class="enter-game-button" id="start-button"[^>]*><span>进入游戏<\/span><\/button>/);
   assert.doesNotMatch(menu, /settings-button|meta-button|guide-button|profile-strip|feature-rail/);
-  assert.match(html, /<nav class="core-tools"[\s\S]*?id="meta-button"[\s\S]*?id="guide-button"[\s\S]*?id="settings-button"/, "secondary utilities move behind the title entry");
-  assert.match(main, /showScreen\(profile\.guideSeen \? "core-screen" : "guide-screen"\)/, "entering preserves first-run guidance");
-  assert.doesNotMatch(main, /else if \(!profile\.guideSeen\)[\s\S]*?showScreen\("guide-screen"\)/, "the guide cannot replace the title before the player enters");
+  assert.match(main, /byId\("start-button"\)\.addEventListener\("click", \(\) => \{[\s\S]*?enterCity\(\);/, "entering always routes through the city hub");
+  assert.doesNotMatch(main.match(/byId\("start-button"\)[\s\S]*?\n\}\);/)?.[0] || "", /beginRun|core-screen|guide-screen/, "the title cannot launch a mission flow directly");
   assert.match(styles, /\.title-lockup h1/);
   assert.match(styles, /\.enter-game-button/);
   assert.match(styles, /@keyframes title-enter/);
+});
+
+test("0.9.9 city hub teaches new players in three simple steps without starting a run", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
+  const city = html.match(/<section id="city-screen"[\s\S]*?<section id="core-screen"/)?.[0] || "";
+
+  assert.match(city, /id="city-title">先在城市里/);
+  assert.match(city, /class="city-skyline"/);
+  for (const id of ["city-mission-button", "guide-button", "meta-button", "settings-button", "city-tutorial", "tutorial-next", "tutorial-skip"]) {
+    assert.match(city, new RegExp(`id="${id}"`));
+  }
+  assert.equal([...city.matchAll(/data-tutorial-step="[0-2]"/g)].length, 3, "the onboarding contains exactly three steps");
+  assert.match(city, /先学移动/);
+  assert.match(city, /攻击，然后闪开/);
+  assert.match(city, /由你决定何时出发/);
+  assert.doesNotMatch(html, /id="guide-screen"/, "the tutorial stays visibly inside the city instead of replacing it with another page");
+  assert.match(html, /data-back="city-screen"[^>]*>← 返回城市/);
+  assert.match(main, /function enterCity\([\s\S]*?showScreen\("city-screen"\);[\s\S]*?if \(promptTutorial && !profile\.guideSeen\) openTutorial\(\);/);
+  assert.match(main, /function finishTutorial\([\s\S]*?profile\.guideSeen = true;[\s\S]*?tutorialDialog\.hidden = true;/);
+  assert.doesNotMatch(main.match(/function finishTutorial[\s\S]*?\n\}/)?.[0] || "", /beginRun|core-screen/, "finishing onboarding remains in the city");
+  assert.match(main, /byId\("city-mission-button"\)\.addEventListener\("click", \(\) => showScreen\("core-screen"\)\)/, "only the mission terminal proceeds to loadout selection");
+  assert.match(main, /function returnToCity\([\s\S]*?enterCity\(\{ promptTutorial: false \}\);/);
+  assert.match(styles, /\.city-screen\s*\{/);
+  assert.match(styles, /\.city-stations\s*\{/);
+  assert.match(styles, /\.city-tutorial\[hidden\]\s*\{\s*display:\s*none/);
 });
 
 test("audio engine includes battle music lifecycle", async () => {
