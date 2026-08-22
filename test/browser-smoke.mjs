@@ -201,7 +201,7 @@ try {
     buttonCount: 1,
     buttonText: "进入游戏",
     title: "霓虹余烬",
-    version: "NEON EMBERS // 0.9.9",
+    version: "NEON EMBERS // 0.10.0",
     secondaryOptionsInsideMenu: false,
   });
   if (process.env.NEON_SMOKE_TITLE_SHOT) {
@@ -209,47 +209,71 @@ try {
     await captureScreenshot(process.env.NEON_SMOKE_TITLE_SHOT);
   }
   await evaluate("document.querySelector('#start-button').click()");
+  await delay(350);
   assert.deepEqual(await evaluate(`(() => ({
     cityActive: document.querySelector('#city-screen').classList.contains('is-active'),
-    tutorialOpen: !document.querySelector('#city-tutorial').hidden,
-    activeStep: document.querySelector('.tutorial-step.is-active')?.dataset.tutorialStep,
+    tutorialOpen: !document.querySelector('#city-live-tutorial').hidden,
+    tutorialTitle: document.querySelector('#city-tutorial-title').textContent,
+    canvasReady: document.querySelector('#city-canvas').width > 0 && document.querySelector('#city-canvas').height > 0,
     coreActive: document.querySelector('#core-screen').classList.contains('is-active'),
     roomActive: document.querySelector('#room-screen').classList.contains('is-active'),
   }))()`), {
-    cityActive: true, tutorialOpen: true, activeStep: "0", coreActive: false, roomActive: false,
-  }, "new players arrive in the city and see step one without entering a mission");
+    cityActive: true, tutorialOpen: true, tutorialTitle: "在城市中移动", canvasReady: true, coreActive: false, roomActive: false,
+  }, "new players arrive in the playable city and receive the first hands-on objective without entering a mission");
   if (process.env.NEON_SMOKE_CITY_TUTORIAL_SHOT) {
-    await delay(400);
     await captureScreenshot(process.env.NEON_SMOKE_CITY_TUTORIAL_SHOT);
   }
-  await evaluate("document.querySelector('#tutorial-next').click()");
-  assert.equal(await evaluate("document.querySelector('.tutorial-step.is-active')?.dataset.tutorialStep"), "1");
-  await evaluate("document.querySelector('#tutorial-next').click()");
-  assert.equal(await evaluate("document.querySelector('.tutorial-step.is-active')?.dataset.tutorialStep"), "2");
-  await evaluate("document.querySelector('#tutorial-next').click()");
+  const cityStartPosition = await evaluate("window.__NEON_DEBUG__?.cityHub ? ({ x: window.__NEON_DEBUG__.cityHub.player.x, y: window.__NEON_DEBUG__.cityHub.player.y }) : null");
+  await evaluate("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w' }))");
+  await delay(650);
+  await evaluate("window.dispatchEvent(new KeyboardEvent('keyup', { key: 'w' }))");
+  assert.equal(await evaluate("document.querySelector('#city-tutorial-title').textContent"), "试一次闪避", "walking the city advances the first objective");
+  if (cityStartPosition) {
+    const cityMovedPosition = await evaluate("({ x: window.__NEON_DEBUG__.cityHub.player.x, y: window.__NEON_DEBUG__.cityHub.player.y })");
+    assert.ok(cityMovedPosition.y < cityStartPosition.y - 100, "WASD physically moves the city player through the world");
+  }
+  await evaluate(`(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ' }));
+  })()`);
+  await delay(240);
+  assert.equal(await evaluate("document.querySelector('#city-tutorial-title').textContent"), "试一次攻击", "dashing advances the second objective");
+  await evaluate("document.querySelector('#city-canvas').dispatchEvent(new PointerEvent('pointerdown', { button: 0, bubbles: true }))");
+  await delay(160);
   assert.deepEqual(await evaluate(`({
     cityActive: document.querySelector('#city-screen').classList.contains('is-active'),
-    tutorialClosed: document.querySelector('#city-tutorial').hidden,
+    tutorialClosed: document.querySelector('#city-live-tutorial').hidden,
     coreActive: document.querySelector('#core-screen').classList.contains('is-active'),
     roomActive: document.querySelector('#room-screen').classList.contains('is-active'),
-  })`), { cityActive: true, tutorialClosed: true, coreActive: false, roomActive: false }, "finishing the tutorial leaves the player in the city");
+  })`), { cityActive: true, tutorialClosed: true, coreActive: false, roomActive: false }, "performing the three tutorial actions leaves the player walking in the city");
+  if (cityStartPosition) {
+    await evaluate("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w' }))");
+    await delay(520);
+    await evaluate("window.dispatchEvent(new KeyboardEvent('keyup', { key: 'w' }))");
+    const collisionPosition = await evaluate("window.__NEON_DEBUG__.cityHub.player.y");
+    assert.ok(collisionPosition >= 410, "the mission-control building physically blocks further movement");
+  }
   if (process.env.NEON_SMOKE_CITY_SHOT) {
-    await delay(400);
     await captureScreenshot(process.env.NEON_SMOKE_CITY_SHOT);
   }
   await evaluate("document.querySelector('#city-screen [data-back=\"menu-screen\"]').click()");
   await evaluate("document.querySelector('#start-button').click()");
+  await delay(160);
   assert.deepEqual(await evaluate(`({
     cityActive: document.querySelector('#city-screen').classList.contains('is-active'),
-    tutorialClosed: document.querySelector('#city-tutorial').hidden,
+    tutorialClosed: document.querySelector('#city-live-tutorial').hidden,
     coreActive: document.querySelector('#core-screen').classList.contains('is-active'),
   })`), { cityActive: true, tutorialClosed: true, coreActive: false }, "returning players still enter the city without replaying onboarding");
-  await evaluate("document.querySelector('#city-mission-button').click()");
+  assert.equal(await evaluate("document.querySelector('#city-interaction').hidden"), false, "walking near the mission terminal exposes an interaction prompt");
+  await evaluate(`(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'e' }));
+  })()`);
   assert.deepEqual(await evaluate(`({
     cityActive: document.querySelector('#city-screen').classList.contains('is-active'),
     coreActive: document.querySelector('#core-screen').classList.contains('is-active'),
     roomActive: document.querySelector('#room-screen').classList.contains('is-active'),
-  })`), { cityActive: false, coreActive: true, roomActive: false }, "the mission terminal opens loadout selection without starting combat");
+  })`), { cityActive: false, coreActive: true, roomActive: false }, "physically interacting with the mission terminal opens loadout selection without starting combat");
 
   await command("Page.navigate", { url: `${baseUrl.replace(/\/$/, "")}/?autostart=hunter` });
   let roomReady = false;
@@ -488,7 +512,7 @@ try {
     assert.ok(publicAssets.current.every(Boolean));
     assert.deepEqual(publicAssets.old, [404, 404, 404, 404, 404]);
     assert.deepEqual(exceptions, []);
-    console.log("Public browser black-box passed: preparation room, purchases, combat start, input, generated art, private debug boundary and retired assets are correct.");
+    console.log("Public browser black-box passed: playable city onboarding, physical terminal interaction, preparation room, combat start, generated art, and private debug boundaries are correct.");
   } else {
 
   const roomInitial = await evaluate(`(() => {
@@ -1935,7 +1959,17 @@ try {
   assert.equal(await evaluate("document.querySelector('#result-screen').classList.contains('is-active')"), true);
   assert.equal(await evaluate("window.__NEON_DEBUG__.audio.musicPlaying"), false);
 
-  await evaluate("document.querySelector('#meta-button').click()");
+  await evaluate(`(() => {
+    document.querySelector('#result-menu-button').click();
+    const city = window.__NEON_DEBUG__.cityHub;
+    city.player.x = 490;
+    city.player.y = 485;
+  })()`);
+  await delay(120);
+  await evaluate(`(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' }));
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'e' }));
+  })()`);
   await delay(160);
   const upgradeCards = await evaluate(`(() => {
     const images = [...document.querySelectorAll('#meta-grid .meta-art')];
@@ -1950,7 +1984,7 @@ try {
   })()`);
   assert.deepEqual(upgradeCards, { count: 3, ready: true, versioned: true, correctArt: true });
   assert.deepEqual(exceptions, []);
-  console.log("Browser smoke passed: 1/2 and debounced-wheel weapon switching, R/Q expandable skill slots, multi-source guard recovery, current-weapon attacks, 34/34 VFX prewarm, six event-linked impact materials, retired full-screen edge flashes, capped moving spark/shard particles, endpoint blade trails, and mission flows are functional.");
+  console.log("Browser smoke passed: playable city movement/collision/tutorial, physical facilities, 1/2 weapon switching, R/Q skills, guard recovery, 34/34 VFX prewarm, and mission flows are functional.");
   }
 } finally {
   socket?.close();

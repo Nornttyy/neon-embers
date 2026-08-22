@@ -1,13 +1,13 @@
 {
   "name": "neon-embers-action-game",
-  "version": "0.9.9",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
     "build": "node scripts/build.mjs",
     "preview": "node server.mjs dist",
-    "check": "node --check server.mjs && node --check src/revision.js && node --check src/config.js && node --check src/audio.js && node --check src/ad-service.js && node --check src/game.js && node --check src/main.js && node --check sw.js && node --check scripts/build.mjs && node --check test/browser-smoke.mjs && node --check test/browser-gpu-perf.mjs && node scripts/build.mjs && node --test test/config.test.js test/site.test.js",
+    "check": "node --check server.mjs && node --check src/revision.js && node --check src/config.js && node --check src/audio.js && node --check src/ad-service.js && node --check src/city.js && node --check src/game.js && node --check src/main.js && node --check sw.js && node --check scripts/build.mjs && node --check test/browser-smoke.mjs && node --check test/browser-gpu-perf.mjs && node scripts/build.mjs && node --test test/config.test.js test/site.test.js",
     "test": "node scripts/build.mjs && node --test test/config.test.js test/site.test.js",
     "smoke": "node test/browser-smoke.mjs",
     "perf:gpu": "node test/browser-gpu-perf.mjs"

@@ -50,79 +50,46 @@
           </div>
           <button class="enter-game-button" id="start-button" type="button"><span>进入游戏</span></button>
         </main>
-        <p class="title-version">NEON EMBERS // 0.9.9</p>
+        <p class="title-version">NEON EMBERS // 0.10.0</p>
       </section>
 
       <section id="city-screen" class="screen city-screen" aria-labelledby="city-title">
-        <div class="city-skyline" aria-hidden="true">
-          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-        </div>
-        <div class="city-transit" aria-hidden="true"><i></i></div>
-        <div class="city-shell" id="city-shell">
-          <header class="city-topbar">
+        <canvas id="city-canvas" class="city-canvas" aria-label="可自由移动的余烬城中央广场"></canvas>
+        <div class="city-play-hud">
+          <header class="city-play-topbar">
             <button class="back-button" data-back="menu-screen" type="button">← 返回标题</button>
-            <div class="city-location"><i></i><span>余烬城 · 中央广场</span><small>HUB 07</small></div>
-            <button class="city-settings" id="settings-button" type="button">设置</button>
+            <div class="city-play-location"><i></i><span id="city-title">余烬城 · 中央广场</span><small>可自由移动</small></div>
+            <button class="city-play-settings" id="settings-button" type="button">设置</button>
           </header>
 
-          <div class="city-plaza">
-            <div class="city-welcome">
-              <p class="eyebrow">WELCOME TO NEON CITY</p>
-              <h2 id="city-title">先在城市里<br /><span>准备好再出发</span></h2>
-              <p class="city-lead">这里是你的安全据点。熟悉操作、调整装备，再由你决定什么时候开始任务。</p>
-              <div class="city-guide-character">
-                <div class="city-guide-orb"><img src="assets/players/hunter-core.png?v=__ASSET_REVISION__" alt="" /></div>
-                <div><small>城市导航员 · N-07</small><strong>“不用着急，先学三个最常用的动作。”</strong></div>
-              </div>
-            </div>
+          <aside class="city-live-tutorial" id="city-live-tutorial" aria-live="polite" hidden>
+            <div class="city-tutorial-line"><span id="city-tutorial-count">基础训练 1 / 3</span><i id="city-tutorial-progress"></i></div>
+            <h2 id="city-tutorial-title">在城市中移动</h2>
+            <p id="city-tutorial-text">使用 WASD 或左侧摇杆移动球体。</p>
+            <strong id="city-tutorial-hint">移动 120 米</strong>
+          </aside>
 
-            <nav class="city-stations" aria-label="城市设施">
-              <button class="city-station city-mission" id="city-mission-button" type="button">
-                <i aria-hidden="true"></i><small>01 // MISSION GATE</small><strong>任务终端</strong>
-                <span>选择球体，在整备房确认后才会进入战区。</span><b>准备任务 →</b>
-              </button>
-              <button class="city-station city-training" id="guide-button" type="button">
-                <i aria-hidden="true"></i><small>02 // TRAINING DECK</small><strong>训练中心</strong>
-                <span>随时重看三步新手教程，不会开始战斗。</span><b>开始教学 →</b>
-              </button>
-              <button class="city-station city-workshop" id="meta-button" type="button">
-                <i aria-hidden="true"></i><small>03 // WORKSHOP</small><strong>装备工坊</strong>
-                <span>使用回收能源强化下一次行动。</span><b>查看装备 →</b>
-              </button>
-            </nav>
+          <aside class="city-play-map" aria-label="城市设施图例">
+            <p>NEON CITY // HUB 07</p>
+            <span><i class="mission"></i>任务终端</span>
+            <span><i class="training"></i>训练中心</span>
+            <span><i class="workshop"></i>装备工坊</span>
+          </aside>
+
+          <div class="city-interaction" id="city-interaction" hidden>
+            <button id="city-interact-button" type="button"><kbd>E</kbd><span><small id="city-interaction-action">互动</small><strong id="city-interaction-name">任务终端</strong></span></button>
           </div>
-        </div>
 
-        <div class="city-tutorial" id="city-tutorial" role="dialog" aria-modal="true" aria-labelledby="tutorial-title" hidden>
-          <div class="tutorial-panel">
-            <div class="tutorial-heading">
-              <div><p class="eyebrow">QUICK START // 3 STEPS</p><h2 id="tutorial-title">一分钟学会行动</h2></div>
-              <div class="tutorial-progress" aria-label="教程进度"><i class="is-active"></i><i></i><i></i></div>
-            </div>
-            <div class="tutorial-steps">
-              <article class="tutorial-step is-active" data-tutorial-step="0">
-                <span class="tutorial-number">01</span>
-                <div class="tutorial-keys" aria-hidden="true"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><em>或拖动摇杆</em></div>
-                <h3>先学移动</h3><p>用 WASD 移动，鼠标只负责朝向。手机上拖动左侧摇杆即可。</p>
-                <strong>记住：先靠近目标，再考虑攻击。</strong>
-              </article>
-              <article class="tutorial-step" data-tutorial-step="1">
-                <span class="tutorial-number">02</span>
-                <div class="tutorial-keys tutorial-actions" aria-hidden="true"><kbd>左键</kbd><em>攻击</em><kbd>空格</kbd><em>闪避</em></div>
-                <h3>攻击，然后闪开</h3><p>左键攻击；敌人出现红色预警时按空格闪避。先掌握这两个动作就能上手。</p>
-                <strong>其他技能可以进战斗后慢慢学。</strong>
-                <details class="tutorial-more"><summary>查看进阶操作</summary><p>按 1、2 或滚动鼠标滚轮切换近战与手枪；按住 E 或鼠标右键正面格挡；R 轮换技能，Q 释放当前技能。</p></details>
-              </article>
-              <article class="tutorial-step" data-tutorial-step="2">
-                <span class="tutorial-number">03</span>
-                <div class="tutorial-route" aria-hidden="true"><span>任务终端</span><i>→</i><span>选择球体</span><i>→</i><span>整备房</span></div>
-                <h3>由你决定何时出发</h3><p>教程结束后仍会留在城市。去任务终端选择球体，再在整备房手动开始战斗。</p>
-                <strong>不会因为结束教程就直接进入闯关。</strong>
-              </article>
-            </div>
-            <div class="tutorial-footer">
-              <button class="text-button" id="tutorial-skip" type="button">暂时跳过</button>
-              <button class="primary-button compact" id="tutorial-next" type="button"><span>下一步</span></button>
+          <div class="city-play-help">
+            <span><kbd>WASD</kbd> 移动</span><span><kbd>空格</kbd> 闪避</span><span><kbd>鼠标 / F</kbd> 攻击</span><span><kbd>E</kbd> 互动</span>
+          </div>
+
+          <div class="city-touch-controls" id="city-touch-controls" aria-label="城市触屏控制">
+            <div class="city-joystick" id="city-joystick"><i id="city-joystick-knob"></i></div>
+            <div class="city-touch-actions">
+              <button id="city-touch-interact" type="button">互动</button>
+              <button id="city-touch-dash" type="button">闪避</button>
+              <button id="city-touch-attack" type="button">攻击</button>
             </div>
           </div>
         </div>
