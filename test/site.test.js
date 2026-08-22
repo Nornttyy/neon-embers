@@ -47,7 +47,7 @@ test("web app manifest references installable local assets", async () => {
 test("service worker caches every required application module and generated sprite", async () => {
   const worker = await readFile(new URL("../sw.js", import.meta.url), "utf8");
   const required = [
-    "index.html", "styles.css", "src/revision.js", "src/config.js", "src/game.js", "src/main.js",
+    "index.html", "styles.css", "src/revision.js", "src/config.js", "src/city.js", "src/game.js", "src/main.js",
     "assets/items/energy-sword.png", "assets/items/phase-blade.png", "assets/items/phase-twin-blades.png", "assets/items/power-hammer.png", "assets/items/rail-pistol.png", "assets/items/energy-core.png",
     ...ROOM_ITEM_ART.map((asset) => `assets/items/${asset}`),
     "assets/players/hunter-core.png", "assets/players/storm-core.png", "assets/players/bastion-core.png",
@@ -73,9 +73,9 @@ test("service worker caches every required application module and generated spri
     const block = worker.match(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\n\\];`))?.[1] || "";
     return [...block.matchAll(/^\s+(?:versioned\()?"[^"\n]+"\)?[,]?$/gm)];
   };
-  assert.equal(shellEntries("CORE_SHELL").length, 17);
+  assert.equal(shellEntries("CORE_SHELL").length, 18);
   assert.equal(shellEntries("ASSET_SHELL").length, 75);
-  assert.equal(shellEntries("CORE_SHELL").length + shellEntries("ASSET_SHELL").length, 92, "bounded installation retains the complete offline manifest");
+  assert.equal(shellEntries("CORE_SHELL").length + shellEntries("ASSET_SHELL").length, 93, "bounded installation retains the complete offline manifest");
   assert.match(worker, /const PRECACHE_CONCURRENCY = 4/);
   const concurrencyBlock = worker.match(/async function cacheWithConcurrency[\s\S]*?\n\}/)?.[0] || "";
   assert.match(concurrencyBlock, /while \(nextIndex < paths\.length\)/);
@@ -363,9 +363,9 @@ test("0.9.6 keeps weapon, skill, wheel, and multi-source guard controls independ
   for (const id of ["touch-attack", "touch-ranged", "touch-block", "touch-dash", "touch-skill"]) {
     assert.match(html, new RegExp(`id="${id}"`), `${id} is retained for mobile play`);
   }
-  assert.match(html, /按 1、2 或滚动鼠标滚轮切换近战与手枪/);
-  assert.match(html, /按住 E 或鼠标右键正面格挡/);
-  assert.match(html, /R 轮换技能，Q 释放当前技能/);
+  for (const cityControl of ["WASD</kbd> 移动", "空格</kbd> 闪避", "鼠标 / F</kbd> 攻击", "E</kbd> 互动"]) {
+    assert.match(html, new RegExp(cityControl), `the playable city teaches ${cityControl.replace(/<[^>]+>/g, "")}`);
+  }
 });
 
 test("combat art uses endpoint-sampled dynamic weapon trails without static slash art or weapon ghosts", async () => {
@@ -635,7 +635,7 @@ test("HTML exposes manifest and install metadata", async () => {
   assert.match(html, /id="room-screen"/);
   assert.match(html, /id="room-grid"/);
   assert.match(html, /id="room-start-button"/);
-  assert.match(html, /NEON EMBERS \/\/ 0\.9\.9/);
+  assert.match(html, /NEON EMBERS \/\/ 0\.10\.0/);
   assert.doesNotMatch(html, /id="upgrade-screen"/);
   assert.doesNotMatch(html, /动作肉鸽/);
 });
@@ -656,31 +656,38 @@ test("title screen keeps one enter-game action before the city hub", async () =>
   assert.match(styles, /@keyframes title-enter/);
 });
 
-test("0.9.9 city hub teaches new players in three simple steps without starting a run", async () => {
+test("0.10.0 city hub is a playable world with movement, collisions, actions, and physical facilities", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
+  const citySource = await readFile(new URL("../src/city.js", import.meta.url), "utf8");
   const styles = await readFile(new URL("../styles.css", import.meta.url), "utf8");
   const city = html.match(/<section id="city-screen"[\s\S]*?<section id="core-screen"/)?.[0] || "";
 
-  assert.match(city, /id="city-title">先在城市里/);
-  assert.match(city, /class="city-skyline"/);
-  for (const id of ["city-mission-button", "guide-button", "meta-button", "settings-button", "city-tutorial", "tutorial-next", "tutorial-skip"]) {
+  assert.match(city, /id="city-canvas"[^>]*aria-label="可自由移动的余烬城中央广场"/);
+  assert.match(city, /id="city-title">余烬城 · 中央广场/);
+  for (const id of ["settings-button", "city-live-tutorial", "city-interaction", "city-interact-button", "city-joystick", "city-touch-interact", "city-touch-dash", "city-touch-attack"]) {
     assert.match(city, new RegExp(`id="${id}"`));
   }
-  assert.equal([...city.matchAll(/data-tutorial-step="[0-2]"/g)].length, 3, "the onboarding contains exactly three steps");
-  assert.match(city, /先学移动/);
-  assert.match(city, /攻击，然后闪开/);
-  assert.match(city, /由你决定何时出发/);
-  assert.doesNotMatch(html, /id="guide-screen"/, "the tutorial stays visibly inside the city instead of replacing it with another page");
+  assert.doesNotMatch(city, /city-stations|city-station|city-mission-button|tutorial-next/, "the city is no longer a disguised card menu or slideshow");
   assert.match(html, /data-back="city-screen"[^>]*>← 返回城市/);
-  assert.match(main, /function enterCity\([\s\S]*?showScreen\("city-screen"\);[\s\S]*?if \(promptTutorial && !profile\.guideSeen\) openTutorial\(\);/);
-  assert.match(main, /function finishTutorial\([\s\S]*?profile\.guideSeen = true;[\s\S]*?tutorialDialog\.hidden = true;/);
-  assert.doesNotMatch(main.match(/function finishTutorial[\s\S]*?\n\}/)?.[0] || "", /beginRun|core-screen/, "finishing onboarding remains in the city");
-  assert.match(main, /byId\("city-mission-button"\)\.addEventListener\("click", \(\) => showScreen\("core-screen"\)\)/, "only the mission terminal proceeds to loadout selection");
+  assert.match(main, /function enterCity\([\s\S]*?showScreen\("city-screen"\);[\s\S]*?cityHub\.start\(\{ tutorial: promptTutorial && !profile\.guideSeen \}\);/);
+  assert.match(main, /function finishCityTutorial\([\s\S]*?profile\.guideSeen = true;[\s\S]*?saveProfile\(\);/);
+  assert.doesNotMatch(main.match(/function finishCityTutorial[\s\S]*?\n\}/)?.[0] || "", /beginRun|core-screen/, "finishing hands-on training remains in the city");
+  assert.match(main, /if \(id === "mission"\) \{[\s\S]*?showScreen\("core-screen"\)/, "walking to and interacting with the mission terminal opens loadout selection");
   assert.match(main, /function returnToCity\([\s\S]*?enterCity\(\{ promptTutorial: false \}\);/);
-  assert.match(styles, /\.city-screen\s*\{/);
-  assert.match(styles, /\.city-stations\s*\{/);
-  assert.match(styles, /\.city-tutorial\[hidden\]\s*\{\s*display:\s*none/);
+  assert.match(citySource, /const BUILDINGS = Object\.freeze/);
+  assert.match(citySource, /const FACILITIES = Object\.freeze/);
+  assert.match(citySource, /const TUTORIAL_STEPS = Object\.freeze\(\[[\s\S]*?在城市中移动[\s\S]*?试一次闪避[\s\S]*?试一次攻击/);
+  assert.match(citySource, /this\.keys\.has\("w"\)/);
+  assert.match(citySource, /this\.setTouchVector|setTouchVector\(x, y\)/);
+  assert.match(citySource, /this\.movePlayer\(dx \* distance, 0\)/);
+  assert.match(citySource, /const blocked = BUILDINGS\.some/);
+  assert.match(citySource, /requestDash\(\)/);
+  assert.match(citySource, /requestAttack\(\)/);
+  assert.match(citySource, /interact\(\)/);
+  assert.match(citySource, /requestAnimationFrame\(\(time\) => this\.loop\(time\)\)/);
+  assert.match(styles, /\.city-canvas\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%/);
+  assert.match(styles, /\.city-touch-controls\s*\{/);
 });
 
 test("audio engine includes battle music lifecycle", async () => {

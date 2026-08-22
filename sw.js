@@ -20,6 +20,7 @@ const CORE_SHELL = [
   versioned("./src/ad-service.js"),
   versioned("./src/audio.js"),
   versioned("./src/config.js"),
+  versioned("./src/city.js"),
   versioned("./src/game.js"),
   versioned("./src/main.js"),
 ];

@@ -1,6 +1,7 @@
 import { CORES, META_UPGRADES, WEAPONS, metaCost } from "./config.js?v=__ASSET_REVISION__";
 import { audio } from "./audio.js?v=__ASSET_REVISION__";
 import { adService } from "./ad-service.js?v=__ASSET_REVISION__";
+import { CityHub } from "./city.js?v=__ASSET_REVISION__";
 import { Game } from "./game.js?v=__ASSET_REVISION__";
 import { ASSET_REVISION, assetUrl } from "./revision.js?v=__ASSET_REVISION__";
 
@@ -47,6 +48,7 @@ let resetArmedUntil = 0;
 let toastTimer = 0;
 let loadingForRun = false;
 let runtimeAssetsReady = false;
+let cityHub = null;
 const offlineCacheState = { loaded: 0, total: 0, failed: [], ready: false };
 
 const byId = (id) => document.getElementById(id);
@@ -54,11 +56,6 @@ const allScreens = [...document.querySelectorAll(".screen")];
 const hud = byId("hud");
 const touchControls = byId("touch-controls");
 const coarsePointer = window.matchMedia("(pointer: coarse)");
-const cityShell = byId("city-shell");
-const tutorialDialog = byId("city-tutorial");
-const tutorialSteps = [...document.querySelectorAll("[data-tutorial-step]")];
-const tutorialProgress = [...document.querySelectorAll(".tutorial-progress i")];
-let tutorialStep = 0;
 
 const elements = {
   loadingScreen: byId("loading-screen"),
@@ -66,6 +63,15 @@ const elements = {
   loadingFill: byId("loading-fill"),
   loadingStage: byId("loading-stage"),
   loadingPercent: byId("loading-percent"),
+  cityTutorial: byId("city-live-tutorial"),
+  cityTutorialCount: byId("city-tutorial-count"),
+  cityTutorialProgress: byId("city-tutorial-progress"),
+  cityTutorialTitle: byId("city-tutorial-title"),
+  cityTutorialText: byId("city-tutorial-text"),
+  cityTutorialHint: byId("city-tutorial-hint"),
+  cityInteraction: byId("city-interaction"),
+  cityInteractionName: byId("city-interaction-name"),
+  cityInteractionAction: byId("city-interaction-action"),
   metaScrap: byId("meta-scrap"),
   coreGrid: byId("core-grid"),
   metaGrid: byId("meta-grid"),
@@ -114,6 +120,7 @@ function formatTime(seconds) {
 }
 
 function showScreen(id, { keepHud = false } = {}) {
+  if (id !== "city-screen") cityHub?.stop();
   for (const screen of allScreens) screen.classList.toggle("is-active", screen.id === id);
   currentScreen = id;
   if (!keepHud) {
@@ -204,41 +211,45 @@ function renderProfile() {
   elements.metaScrap.textContent = profile.scrap;
 }
 
-function renderTutorialStep() {
-  tutorialSteps.forEach((step, index) => {
-    const active = index === tutorialStep;
-    step.classList.toggle("is-active", active);
-    step.setAttribute("aria-hidden", String(!active));
-  });
-  tutorialProgress.forEach((marker, index) => marker.classList.toggle("is-active", index === tutorialStep));
-  byId("tutorial-next").querySelector("span").textContent = tutorialStep === tutorialSteps.length - 1
-    ? "完成，回到城市"
-    : "下一步";
+function renderCityTutorial(state) {
+  elements.cityTutorial.hidden = !state.active;
+  if (!state.active) return;
+  elements.cityTutorialCount.textContent = `城市实训 ${state.index + 1} / ${state.total}`;
+  elements.cityTutorialProgress.style.width = `${(state.index + 1) / state.total * 100}%`;
+  elements.cityTutorialTitle.textContent = state.title;
+  elements.cityTutorialText.textContent = state.text;
+  elements.cityTutorialHint.textContent = state.hint;
 }
 
-function openTutorial() {
-  tutorialStep = 0;
-  renderTutorialStep();
-  cityShell.inert = true;
-  tutorialDialog.hidden = false;
-  window.setTimeout(() => byId("tutorial-next").focus(), 0);
+function renderCityState({ facility }) {
+  elements.cityInteraction.hidden = !facility;
+  if (!facility) return;
+  elements.cityInteractionName.textContent = facility.name;
+  elements.cityInteractionAction.textContent = facility.action;
 }
 
-function finishTutorial(message = "教学完成，可以在城市中自由准备") {
+function finishCityTutorial() {
   profile.guideSeen = true;
   saveProfile();
-  cityShell.inert = false;
-  tutorialDialog.hidden = true;
-  byId("city-mission-button").focus();
-  showToast(message);
+  showToast("基础训练完成。现在可以自由探索，走到任务终端按 E 出发。", 2600);
 }
 
 function enterCity({ promptTutorial = true } = {}) {
   renderProfile();
   showScreen("city-screen");
-  cityShell.inert = false;
-  tutorialDialog.hidden = true;
-  if (promptTutorial && !profile.guideSeen) openTutorial();
+  cityHub.start({ tutorial: promptTutorial && !profile.guideSeen });
+}
+
+function useCityFacility(id) {
+  if (id === "mission") {
+    showScreen("core-screen");
+  } else if (id === "workshop") {
+    renderMeta();
+    showScreen("meta-screen");
+  } else if (id === "training") {
+    cityHub.startTutorial();
+    showToast("城市实训已重新开始");
+  }
 }
 
 function renderCoreCards() {
@@ -406,6 +417,14 @@ function showResult(summary) {
   showGameLayer("result-screen");
 }
 
+cityHub = new CityHub(byId("city-canvas"), {
+  onFacility: useCityFacility,
+  onState: renderCityState,
+  onTutorial: renderCityTutorial,
+  onTutorialComplete: finishCityTutorial,
+  onMessage: (message) => showToast(message),
+});
+
 const game = new Game(byId("game-canvas"), {
   onLoadProgress: renderLoadProgress,
   onHud: renderHud,
@@ -474,24 +493,14 @@ byId("start-button").addEventListener("click", () => {
   audio.unlock();
   enterCity();
 });
-byId("city-mission-button").addEventListener("click", () => showScreen("core-screen"));
-byId("meta-button").addEventListener("click", () => { renderMeta(); showScreen("meta-screen"); });
-byId("guide-button").addEventListener("click", openTutorial);
-byId("tutorial-next").addEventListener("click", () => {
-  if (tutorialStep < tutorialSteps.length - 1) {
-    tutorialStep += 1;
-    renderTutorialStep();
-    return;
-  }
-  finishTutorial();
-});
-byId("tutorial-skip").addEventListener("click", () => finishTutorial("已跳过教学，可从训练中心随时重看"));
+byId("city-interact-button").addEventListener("click", () => cityHub.interact());
 byId("settings-button").addEventListener("click", openSettings);
 byId("settings-close").addEventListener("click", closeSettings);
 
 for (const button of document.querySelectorAll("[data-back]")) {
   button.addEventListener("click", () => {
-    showScreen(button.dataset.back);
+    if (button.dataset.back === "city-screen") enterCity({ promptTutorial: false });
+    else showScreen(button.dataset.back);
   });
 }
 
@@ -545,6 +554,45 @@ byId("restart-button").addEventListener("click", () => beginRun(profile.lastCore
 byId("quit-button").addEventListener("click", returnToCity);
 byId("again-button").addEventListener("click", () => beginRun(profile.lastCore));
 byId("result-menu-button").addEventListener("click", returnToCity);
+
+const cityJoystick = byId("city-joystick");
+const cityJoystickKnob = byId("city-joystick-knob");
+let cityJoystickPointer = null;
+
+function updateCityJoystick(event) {
+  const rect = cityJoystick.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  let dx = event.clientX - centerX;
+  let dy = event.clientY - centerY;
+  const max = rect.width * .32;
+  const length = Math.hypot(dx, dy);
+  if (length > max) { dx = dx / length * max; dy = dy / length * max; }
+  cityJoystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+  cityHub.setTouchVector(dx / max, dy / max);
+}
+
+function releaseCityJoystick(event) {
+  if (event.pointerId !== cityJoystickPointer) return;
+  cityJoystickPointer = null;
+  cityJoystickKnob.style.transform = "translate(0, 0)";
+  cityHub.setTouchVector(0, 0);
+}
+
+cityJoystick.addEventListener("pointerdown", (event) => {
+  cityJoystickPointer = event.pointerId;
+  cityJoystick.setPointerCapture(event.pointerId);
+  updateCityJoystick(event);
+});
+cityJoystick.addEventListener("pointermove", (event) => {
+  if (event.pointerId === cityJoystickPointer) updateCityJoystick(event);
+});
+cityJoystick.addEventListener("pointerup", releaseCityJoystick);
+cityJoystick.addEventListener("pointercancel", releaseCityJoystick);
+byId("city-touch-dash").addEventListener("pointerdown", (event) => { event.preventDefault(); cityHub.requestDash(); });
+byId("city-touch-attack").addEventListener("pointerdown", (event) => { event.preventDefault(); cityHub.requestAttack(); });
+byId("city-touch-interact").addEventListener("pointerdown", (event) => { event.preventDefault(); cityHub.interact(); });
+
 const joystickZone = byId("joystick-zone");
 const joystickKnob = byId("joystick-knob");
 let joystickPointer = null;
@@ -596,7 +644,7 @@ renderProfile();
 void adService.isAvailable();
 
 if (["127.0.0.1", "localhost"].includes(window.location.hostname)) {
-  window.__NEON_DEBUG__ = { game, beginRun, enterCity, openTutorial, audio };
+  window.__NEON_DEBUG__ = { game, cityHub, beginRun, enterCity, audio };
 }
 
 const previewCore = new URLSearchParams(window.location.search).get("autostart");
