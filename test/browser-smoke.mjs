@@ -201,7 +201,7 @@ try {
     buttonCount: 1,
     buttonText: "进入游戏",
     title: "霓虹余烬",
-    version: "NEON EMBERS // 0.10.0",
+    version: "NEON EMBERS // 0.10.1",
     secondaryOptionsInsideMenu: false,
   });
   if (process.env.NEON_SMOKE_TITLE_SHOT) {

@@ -635,7 +635,7 @@ test("HTML exposes manifest and install metadata", async () => {
   assert.match(html, /id="room-screen"/);
   assert.match(html, /id="room-grid"/);
   assert.match(html, /id="room-start-button"/);
-  assert.match(html, /NEON EMBERS \/\/ 0\.10\.0/);
+  assert.match(html, /NEON EMBERS \/\/ 0\.10\.1/);
   assert.doesNotMatch(html, /id="upgrade-screen"/);
   assert.doesNotMatch(html, /动作肉鸽/);
 });
@@ -656,7 +656,7 @@ test("title screen keeps one enter-game action before the city hub", async () =>
   assert.match(styles, /@keyframes title-enter/);
 });
 
-test("0.10.0 city hub is a playable world with movement, collisions, actions, and physical facilities", async () => {
+test("0.10.1 city hub is playable and built from the existing high-quality art set", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const main = await readFile(new URL("../src/main.js", import.meta.url), "utf8");
   const citySource = await readFile(new URL("../src/city.js", import.meta.url), "utf8");
@@ -686,6 +686,19 @@ test("0.10.0 city hub is a playable world with movement, collisions, actions, an
   assert.match(citySource, /requestAttack\(\)/);
   assert.match(citySource, /interact\(\)/);
   assert.match(citySource, /requestAnimationFrame\(\(time\) => this\.loop\(time\)\)/);
+  for (const asset of [
+    "outer-floor.png", "room-floor.png", "blockade-floor.png", "core-floor.png",
+    "arena-barrier.png", "arena-pylon.png", "arena-vent.png", "energy-terminal.png",
+    "hunter-core.png", "storm-core.png", "bastion-core.png", "shield-drone.png",
+    "energy-sword.png", "rail-pistol.png", "power-hammer.png", "energy-core.png",
+    "dash-streak-hard.png", "blade-hit.png", "pulse-wave.png",
+  ]) assert.match(citySource, new RegExp(asset.replaceAll(".", "\\.")), `city reuses ${asset}`);
+  assert.match(citySource, /this\.staticScene = document\.createElement\("canvas"\)/, "the material-rich city scene is cached instead of rebuilding all props every frame");
+  assert.match(citySource, /ctx\.drawImage\([\s\S]*?this\.staticScene,[\s\S]*?WORLD\.width, WORLD\.height/);
+  assert.match(citySource, /const sceneDpr = this\.view\?\.dpr \|\| 1/, "the cached city preserves source detail on high-DPR displays");
+  assert.match(citySource, /getPattern\(ctx, imageKey\)/);
+  assert.match(citySource, /const CITY_NPCS = Object\.freeze/);
+  assert.match(citySource, /const WORKSHOP_DISPLAYS = Object\.freeze/);
   assert.match(styles, /\.city-canvas\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%/);
   assert.match(styles, /\.city-touch-controls\s*\{/);
 });

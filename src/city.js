@@ -21,6 +21,30 @@ const FACILITIES = Object.freeze([
   Object.freeze({ id: "training", x: 1510, y: 500, radius: 105, name: "训练中心", action: "重新开始基础训练", color: "#ffcc66" }),
 ]);
 
+const CITY_PROPS = Object.freeze([
+  Object.freeze({ key: "pylon", x: 650, y: 500, width: 86, angle: -.14, glow: "#4df6ff" }),
+  Object.freeze({ key: "pylon", x: 1310, y: 500, width: 86, angle: .14, glow: "#4df6ff" }),
+  Object.freeze({ key: "pylon", x: 650, y: 935, width: 86, angle: .12, glow: "#aa72ff" }),
+  Object.freeze({ key: "pylon", x: 1310, y: 935, width: 86, angle: -.12, glow: "#aa72ff" }),
+  Object.freeze({ key: "vent", x: 155, y: 650, width: 92, angle: .12, glow: "#4df6ff" }),
+  Object.freeze({ key: "vent", x: 350, y: 790, width: 86, angle: -.18, glow: "#4df6ff" }),
+  Object.freeze({ key: "vent", x: 1650, y: 650, width: 92, angle: -.12, glow: "#ff4f9a" }),
+  Object.freeze({ key: "vent", x: 1800, y: 805, width: 86, angle: .18, glow: "#ff4f9a" }),
+  Object.freeze({ key: "energyCore", x: 730, y: 710, width: 54, angle: 0, glow: "#4df6ff" }),
+  Object.freeze({ key: "energyCore", x: 1230, y: 710, width: 54, angle: 0, glow: "#aa72ff" }),
+]);
+
+const CITY_NPCS = Object.freeze([
+  Object.freeze({ key: "storm", x: 590, y: 600, width: 92, name: "相位技师", color: "#aa72ff" }),
+  Object.freeze({ key: "bastion", x: 1390, y: 610, width: 94, name: "壁垒教官", color: "#ffcc66" }),
+]);
+
+const WORKSHOP_DISPLAYS = Object.freeze([
+  Object.freeze({ key: "sword", x: 275, y: 495, width: 66, color: "#4df6ff" }),
+  Object.freeze({ key: "pistol", x: 365, y: 495, width: 62, color: "#aa72ff" }),
+  Object.freeze({ key: "hammer", x: 185, y: 495, width: 66, color: "#ffcc66" }),
+]);
+
 const TUTORIAL_STEPS = Object.freeze([
   Object.freeze({ title: "在城市中移动", text: "使用 WASD 或左侧摇杆移动球体。先走一小段，熟悉镜头跟随。", hint: "移动 120 米" }),
   Object.freeze({ title: "试一次闪避", text: "按空格或右侧“闪避”。闪避可以快速脱离危险。", hint: "完成 1 次闪避" }),
@@ -66,11 +90,33 @@ export class CityHub {
     this.tutorialStep = -1;
     this.nearFacility = null;
     this.lastStateSignature = "";
-    this.images = {
-      player: this.loadImage("assets/players/hunter-core.png"),
-      terminal: this.loadImage("assets/world/energy-terminal.png"),
-      sword: this.loadImage("assets/items/energy-sword.png"),
-    };
+    this.patterns = new Map();
+    this.staticScene = document.createElement("canvas");
+    this.staticScene.width = WORLD.width;
+    this.staticScene.height = WORLD.height;
+    this.staticSceneDpr = 0;
+    this.staticSceneReady = false;
+    this.images = Object.fromEntries(Object.entries({
+      player: "assets/players/hunter-core.png",
+      storm: "assets/players/storm-core.png",
+      bastion: "assets/players/bastion-core.png",
+      floorOuter: "assets/world/outer-floor.png",
+      floorRoom: "assets/world/room-floor.png",
+      floorBlockade: "assets/world/blockade-floor.png",
+      floorCore: "assets/world/core-floor.png",
+      barrier: "assets/world/arena-barrier.png",
+      pylon: "assets/world/arena-pylon.png",
+      vent: "assets/world/arena-vent.png",
+      terminal: "assets/world/energy-terminal.png",
+      sword: "assets/items/energy-sword.png",
+      pistol: "assets/items/rail-pistol.png",
+      hammer: "assets/items/power-hammer.png",
+      energyCore: "assets/items/energy-core.png",
+      trainingDrone: "assets/enemies/shield-drone.png",
+      dashStreak: "assets/effects/dash-streak-hard.png",
+      bladeHit: "assets/effects/blade-hit.png",
+      pulseWave: "assets/effects/pulse-wave.png",
+    }).map(([key, path]) => [key, this.loadImage(path)]));
 
     this.onKeyDown = (event) => this.handleKey(event, true);
     this.onKeyUp = (event) => this.handleKey(event, false);
@@ -88,6 +134,10 @@ export class CityHub {
 
   loadImage(path) {
     const image = new Image();
+    image.addEventListener("load", () => {
+      this.staticSceneReady = false;
+      this.patterns.clear();
+    });
     image.src = assetUrl(path);
     return image;
   }
@@ -136,6 +186,7 @@ export class CityHub {
       this.canvas.height = height;
     }
     this.view = { width: rect.width, height: rect.height, dpr };
+    if (this.staticSceneDpr !== dpr) this.staticSceneReady = false;
   }
 
   handleKey(event, down) {
@@ -320,147 +371,309 @@ export class CityHub {
   }
 
   drawWorld(ctx) {
-    ctx.fillStyle = "#091321";
-    ctx.fillRect(0, 0, WORLD.width, WORLD.height);
-
-    ctx.strokeStyle = "rgba(77,246,255,.055)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= WORLD.width; x += 50) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD.height); ctx.stroke();
-    }
-    for (let y = 0; y <= WORLD.height; y += 50) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD.width, y); ctx.stroke();
-    }
-
-    ctx.fillStyle = "#111a2a";
-    ctx.fillRect(0, 520, WORLD.width, 390);
-    ctx.fillRect(720, 0, 520, WORLD.height);
-    ctx.strokeStyle = "rgba(129,231,255,.2)";
-    ctx.lineWidth = 3;
-    ctx.setLineDash([34, 30]);
-    ctx.beginPath(); ctx.moveTo(0, 715); ctx.lineTo(WORLD.width, 715); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(980, 0); ctx.lineTo(980, WORLD.height); ctx.stroke();
-    ctx.setLineDash([]);
-
-    const plaza = ctx.createRadialGradient(980, 715, 40, 980, 715, 300);
-    plaza.addColorStop(0, "rgba(77,246,255,.12)");
-    plaza.addColorStop(1, "rgba(26,40,62,.96)");
-    ctx.fillStyle = plaza;
-    ctx.beginPath(); ctx.arc(980, 715, 285, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "rgba(77,246,255,.24)";
-    ctx.lineWidth = 2;
-    for (const radius of [130, 210, 285]) { ctx.beginPath(); ctx.arc(980, 715, radius, 0, Math.PI * 2); ctx.stroke(); }
-
-    for (const building of BUILDINGS) this.drawBuilding(ctx, building);
-    this.drawStreetLights(ctx);
+    if (!this.staticSceneReady) this.buildStaticScene();
+    ctx.drawImage(
+      this.staticScene,
+      0, 0, this.staticScene.width, this.staticScene.height,
+      0, 0, WORLD.width, WORLD.height,
+    );
+    for (const npc of CITY_NPCS) this.drawNpc(ctx, npc);
     for (const facility of FACILITIES) this.drawFacility(ctx, facility);
     this.drawTrainingDummy(ctx);
   }
 
-  drawBuilding(ctx, building) {
-    ctx.fillStyle = "rgba(0,0,0,.4)";
-    ctx.fillRect(building.x + 20, building.y + 24, building.w, building.h);
-    const gradient = ctx.createLinearGradient(building.x, building.y, building.x + building.w, building.y + building.h);
-    gradient.addColorStop(0, "#182642");
-    gradient.addColorStop(1, "#0a1224");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(building.x, building.y, building.w, building.h);
-    ctx.strokeStyle = `${building.color}66`;
-    ctx.lineWidth = 3;
-    ctx.strokeRect(building.x, building.y, building.w, building.h);
+  buildStaticScene() {
+    const sceneDpr = this.view?.dpr || 1;
+    const pixelWidth = Math.round(WORLD.width * sceneDpr);
+    const pixelHeight = Math.round(WORLD.height * sceneDpr);
+    if (this.staticScene.width !== pixelWidth || this.staticScene.height !== pixelHeight) {
+      this.staticScene.width = pixelWidth;
+      this.staticScene.height = pixelHeight;
+      this.patterns.clear();
+    }
+    const ctx = this.staticScene.getContext("2d", { alpha: false });
+    ctx.setTransform(sceneDpr, 0, 0, sceneDpr, 0, 0);
+    ctx.clearRect(0, 0, WORLD.width, WORLD.height);
+    this.drawCityGround(ctx);
+    for (const building of BUILDINGS) this.drawBuilding(ctx, building);
+    for (const prop of CITY_PROPS) this.drawWorldProp(ctx, prop.key, prop.x, prop.y, prop.width, prop.angle, prop.glow);
+    for (const display of WORKSHOP_DISPLAYS) this.drawWorkshopDisplay(ctx, display);
+    this.drawCityBoundary(ctx);
+    this.staticSceneDpr = sceneDpr;
+    this.staticSceneReady = true;
+  }
 
-    ctx.fillStyle = "rgba(3,8,19,.72)";
-    ctx.fillRect(building.x + 28, building.y + 34, building.w - 56, 72);
+  getPattern(ctx, imageKey) {
+    const image = this.images[imageKey];
+    if (!image?.complete || !image.naturalWidth) return null;
+    const cacheKey = `${imageKey}:${ctx.canvas === this.staticScene ? "city" : "view"}`;
+    if (!this.patterns.has(cacheKey)) this.patterns.set(cacheKey, ctx.createPattern(image, "repeat"));
+    return this.patterns.get(cacheKey);
+  }
+
+  fillTexturePanel(ctx, imageKey, x, y, width, height, fallback, radius = 0, alpha = 1) {
+    ctx.save();
+    roundedRect(ctx, x, y, width, height, radius);
+    ctx.clip();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = this.getPattern(ctx, imageKey) || fallback;
+    ctx.fillRect(x, y, width, height);
+    ctx.restore();
+  }
+
+  drawCityGround(ctx) {
+    ctx.fillStyle = this.getPattern(ctx, "floorOuter") || "#101827";
+    ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+    ctx.fillStyle = "rgba(3, 8, 17, .18)";
+    ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+
+    this.fillTexturePanel(ctx, "floorRoom", 0, 505, WORLD.width, 420, "#172234", 0, .98);
+    this.fillTexturePanel(ctx, "floorRoom", 700, 0, 560, WORLD.height, "#172234", 0, .98);
+    this.fillTexturePanel(ctx, "floorBlockade", 0, 455, 700, 70, "#19152a", 0, .9);
+    this.fillTexturePanel(ctx, "floorBlockade", 1260, 455, 740, 70, "#19152a", 0, .9);
+    this.fillTexturePanel(ctx, "floorBlockade", 0, 925, 700, 72, "#19152a", 0, .9);
+    this.fillTexturePanel(ctx, "floorBlockade", 1260, 925, 740, 72, "#19152a", 0, .9);
+
+    const coreFloor = this.images.floorCore;
+    if (coreFloor?.complete && coreFloor.naturalWidth) {
+      ctx.save();
+      ctx.shadowColor = "rgba(77, 246, 255, .2)";
+      ctx.shadowBlur = 34;
+      ctx.drawImage(coreFloor, 685, 420, 590, 590);
+      ctx.restore();
+    } else {
+      this.fillTexturePanel(ctx, "floorRoom", 685, 420, 590, 590, "#172234", 0, 1);
+    }
+
+    ctx.strokeStyle = "rgba(120, 226, 255, .2)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(32, 32, WORLD.width - 64, WORLD.height - 64);
+  }
+
+  drawBuilding(ctx, building) {
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, .72)";
+    ctx.shadowBlur = 28;
+    ctx.shadowOffsetY = 22;
+    roundedRect(ctx, building.x, building.y, building.w, building.h, 18);
+    ctx.fillStyle = "#070d18";
+    ctx.fill();
+    ctx.restore();
+
+    const texture = building.code === "MISSION CONTROL" ? "floorRoom" : "floorBlockade";
+    this.fillTexturePanel(ctx, texture, building.x, building.y, building.w, building.h, "#121a28", 18, .98);
+    const shade = ctx.createLinearGradient(building.x, building.y, building.x, building.y + building.h);
+    shade.addColorStop(0, "rgba(6, 13, 25, .08)");
+    shade.addColorStop(1, "rgba(2, 6, 14, .56)");
+    ctx.fillStyle = shade;
+    roundedRect(ctx, building.x, building.y, building.w, building.h, 18);
+    ctx.fill();
+    ctx.strokeStyle = `${building.color}88`;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    const entrance = FACILITIES.find((facility) => facility.x > building.x && facility.x < building.x + building.w && Math.abs(facility.y - (building.y + building.h)) < 130);
+    for (let x = building.x + 68; x < building.x + building.w - 45; x += 122) {
+      if (entrance && Math.abs(x - entrance.x) < 92) continue;
+      this.drawWorldProp(ctx, "barrier", x, building.y + building.h - 2, 126, 0, building.color);
+    }
+    this.drawWorldProp(ctx, "vent", building.x + building.w - 82, building.y + 96, 78, .08, building.color);
+    this.drawWorldProp(ctx, "pylon", building.x + 84, building.y + building.h - 92, 74, -.08, building.color);
+
+    ctx.fillStyle = "rgba(3, 8, 18, .9)";
+    roundedRect(ctx, building.x + 30, building.y + 28, Math.min(290, building.w - 60), 66, 10);
+    ctx.fill();
+    ctx.strokeStyle = `${building.color}88`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
     ctx.fillStyle = building.color;
     ctx.font = "800 18px system-ui";
-    ctx.fillText(building.name, building.x + 46, building.y + 67);
-    ctx.fillStyle = "rgba(194,226,239,.55)";
+    ctx.fillText(building.name, building.x + 48, building.y + 59);
+    ctx.fillStyle = "rgba(221, 244, 250, .58)";
     ctx.font = "700 9px system-ui";
-    ctx.fillText(building.code, building.x + 46, building.y + 87);
+    ctx.fillText(building.code, building.x + 48, building.y + 80);
+  }
 
-    for (let y = building.y + 135; y < building.y + building.h - 28; y += 54) {
-      for (let x = building.x + 32; x < building.x + building.w - 26; x += 64) {
-        const lit = (Math.floor(x / 64) + Math.floor(y / 54)) % 3 !== 0;
-        ctx.fillStyle = lit ? `${building.color}24` : "rgba(2,7,16,.7)";
-        ctx.fillRect(x, y, 34, 18);
-      }
+  drawCityBoundary(ctx) {
+    for (let x = 78; x < WORLD.width - 55; x += 138) {
+      this.drawWorldProp(ctx, "barrier", x, 35, 142, 0, "#4df6ff");
+      this.drawWorldProp(ctx, "barrier", x, WORLD.height - 35, 142, Math.PI, "#4df6ff");
+    }
+    for (let y = 100; y < WORLD.height - 60; y += 126) {
+      this.drawWorldProp(ctx, "barrier", 35, y, 126, Math.PI / 2, "#4df6ff");
+      this.drawWorldProp(ctx, "barrier", WORLD.width - 35, y, 126, -Math.PI / 2, "#4df6ff");
     }
   }
 
-  drawStreetLights(ctx) {
-    const lamps = [[650,500],[1310,500],[650,940],[1310,940],[770,470],[1190,470],[770,965],[1190,965]];
-    for (const [x, y] of lamps) {
-      const glow = ctx.createRadialGradient(x, y, 2, x, y, 80);
-      glow.addColorStop(0, "rgba(77,246,255,.34)");
-      glow.addColorStop(1, "rgba(77,246,255,0)");
-      ctx.fillStyle = glow; ctx.fillRect(x - 80, y - 80, 160, 160);
-      ctx.fillStyle = "#b9fbff"; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
-    }
+  drawWorldProp(ctx, imageKey, x, y, width, angle = 0, glow = "#4df6ff", alpha = 1) {
+    const image = this.images[imageKey];
+    if (!image?.complete || !image.naturalWidth) return false;
+    const height = width * image.naturalHeight / image.naturalWidth;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 10;
+    ctx.drawImage(image, -width / 2, -height / 2, width, height);
+    ctx.restore();
+    return true;
+  }
+
+  drawWorkshopDisplay(ctx, display) {
+    this.drawWorldProp(ctx, "energyCore", display.x, display.y + 16, 54, 0, display.color, .82);
+    this.drawWorldProp(ctx, display.key, display.x, display.y - 9, display.width, -.14, display.color, .96);
+  }
+
+  drawNpc(ctx, npc) {
+    const bob = Math.sin(this.time * 2.1 + npc.x * .01) * 3;
+    ctx.save();
+    ctx.translate(npc.x, npc.y + bob);
+    ctx.fillStyle = "rgba(0, 0, 0, .48)";
+    ctx.beginPath();
+    ctx.ellipse(7, 27, 38, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    this.drawWorldProp(ctx, npc.key, npc.x, npc.y + bob, npc.width, 0, npc.color);
+    ctx.fillStyle = "rgba(3, 8, 18, .88)";
+    roundedRect(ctx, npc.x - 52, npc.y + 52, 104, 28, 7);
+    ctx.fill();
+    ctx.strokeStyle = `${npc.color}88`;
+    ctx.stroke();
+    ctx.fillStyle = npc.color;
+    ctx.font = "800 10px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(npc.name, npc.x, npc.y + 70);
+    ctx.textAlign = "start";
   }
 
   drawFacility(ctx, facility) {
-    const pulse = 1 + Math.sin(this.time * 3 + facility.x * .01) * .08;
+    const pulse = 1 + Math.sin(this.time * 2.6 + facility.x * .01) * .035;
+    const active = this.nearFacility?.id === facility.id;
     ctx.save();
     ctx.translate(facility.x, facility.y);
-    ctx.strokeStyle = facility.color;
-    ctx.lineWidth = 3;
-    ctx.globalAlpha = .34;
-    ctx.beginPath(); ctx.arc(0, 0, 50 * pulse, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = .9;
-    ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.stroke();
+    ctx.rotate(this.time * .08);
+    ctx.globalAlpha = active ? .82 : .46;
+    const wave = this.images.pulseWave;
+    if (wave?.complete && wave.naturalWidth) ctx.drawImage(wave, -88 * pulse, -88 * pulse, 176 * pulse, 176 * pulse);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(facility.x, facility.y - 10 + Math.sin(this.time * 2.8 + facility.y) * 2);
+    ctx.shadowColor = facility.color;
+    ctx.shadowBlur = active ? 28 : 14;
     if (this.images.terminal.complete && this.images.terminal.naturalWidth) {
-      ctx.drawImage(this.images.terminal, -34, -34, 68, 68);
+      const terminalWidth = facility.id === "mission" ? 138 : 122;
+      const terminalHeight = terminalWidth * this.images.terminal.naturalHeight / this.images.terminal.naturalWidth;
+      ctx.drawImage(this.images.terminal, -terminalWidth / 2, -terminalHeight / 2, terminalWidth, terminalHeight);
     } else {
-      ctx.fillStyle = facility.color; ctx.fillRect(-12, -20, 24, 40);
+      ctx.fillStyle = facility.color;
+      ctx.fillRect(-18, -28, 36, 56);
     }
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(facility.x, facility.y);
     ctx.fillStyle = "rgba(3,8,18,.92)";
-    roundedRect(ctx, -80, 62, 160, 42, 8); ctx.fill();
-    ctx.strokeStyle = `${facility.color}88`; ctx.stroke();
+    roundedRect(ctx, -88, 72, 176, 43, 8);
+    ctx.fill();
+    ctx.strokeStyle = active ? facility.color : `${facility.color}99`;
+    ctx.lineWidth = active ? 3 : 1.5;
+    ctx.stroke();
     ctx.fillStyle = facility.color;
     ctx.font = "800 13px system-ui";
     ctx.textAlign = "center";
-    ctx.fillText(facility.name, 0, 88);
+    ctx.fillText(facility.name, 0, 98);
     ctx.textAlign = "start";
     ctx.restore();
   }
 
   drawTrainingDummy(ctx) {
-    const x = 1100;
-    const y = 760;
+    const x = 1510;
+    const y = 725;
     const hit = this.attackTime > .12 && Math.hypot(this.player.x - x, this.player.y - y) < 150;
     ctx.save();
-    ctx.translate(x + (hit ? Math.sin(this.time * 80) * 6 : 0), y);
-    ctx.fillStyle = "rgba(255,204,102,.12)";
-    ctx.beginPath(); ctx.arc(0, 0, 46, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "rgba(255,204,102,.66)"; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(0, -8, 20, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, 12); ctx.lineTo(0, 54); ctx.moveTo(-24, 30); ctx.lineTo(24, 30); ctx.stroke();
-    ctx.fillStyle = "#ffcc66"; ctx.font = "800 10px system-ui"; ctx.textAlign = "center"; ctx.fillText("训练靶", 0, 78); ctx.textAlign = "start";
+    ctx.translate(x + (hit ? Math.sin(this.time * 80) * 7 : 0), y + Math.sin(this.time * 2.4) * 3);
+    ctx.globalAlpha = .8;
+    ctx.shadowColor = "#ffcc66";
+    ctx.shadowBlur = 18;
+    const drone = this.images.trainingDrone;
+    if (drone?.complete && drone.naturalWidth) {
+      const width = 112;
+      const height = width * drone.naturalHeight / drone.naturalWidth;
+      ctx.drawImage(drone, -width / 2, -height / 2, width, height);
+    }
+    if (hit && this.images.bladeHit?.complete && this.images.bladeHit.naturalWidth) {
+      ctx.globalAlpha = .95;
+      ctx.drawImage(this.images.bladeHit, -48, -48, 96, 96);
+    }
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(3, 8, 18, .9)";
+    roundedRect(ctx, -54, 60, 108, 28, 7);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 204, 102, .66)";
+    ctx.stroke();
+    ctx.fillStyle = "#ffcc66";
+    ctx.font = "800 10px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText("训练无人机", 0, 78);
+    ctx.textAlign = "start";
     ctx.restore();
   }
 
   drawPlayer(ctx) {
     const { x, y, facingX, facingY } = this.player;
+    const facing = Math.atan2(facingY, facingX);
     ctx.save();
     ctx.translate(x, y);
-    const speedGlow = this.dashTime > 0 ? 1 : .35;
-    const aura = ctx.createRadialGradient(0, 0, 8, 0, 0, 58);
-    aura.addColorStop(0, `rgba(77,246,255,${.28 + speedGlow * .18})`);
-    aura.addColorStop(1, "rgba(77,246,255,0)");
-    ctx.fillStyle = aura; ctx.fillRect(-60, -60, 120, 120);
-    ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.beginPath(); ctx.ellipse(5, 24, 34, 15, 0, 0, Math.PI * 2); ctx.fill();
-    if (this.images.player.complete && this.images.player.naturalWidth) ctx.drawImage(this.images.player, -35, -35, 70, 70);
-    else { ctx.fillStyle = "#4df6ff"; ctx.beginPath(); ctx.arc(0, 0, PLAYER_RADIUS, 0, Math.PI * 2); ctx.fill(); }
+    if (this.dashTime > 0 && this.images.dashStreak?.complete && this.images.dashStreak.naturalWidth) {
+      ctx.save();
+      ctx.rotate(facing);
+      const width = 190;
+      const height = width * this.images.dashStreak.naturalHeight / this.images.dashStreak.naturalWidth;
+      ctx.globalAlpha = .88;
+      ctx.drawImage(this.images.dashStreak, -width * .78, -height / 2, width, height);
+      ctx.restore();
+    }
+    ctx.fillStyle = "rgba(0, 0, 0, .5)";
+    ctx.beginPath();
+    ctx.ellipse(7, 26, 38, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (this.images.player.complete && this.images.player.naturalWidth) {
+      const width = 94;
+      const height = width * this.images.player.naturalHeight / this.images.player.naturalWidth;
+      ctx.shadowColor = "#4df6ff";
+      ctx.shadowBlur = this.dashTime > 0 ? 24 : 12;
+      ctx.drawImage(this.images.player, -width / 2, -height / 2, width, height);
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.fillStyle = "#4df6ff";
+      ctx.beginPath();
+      ctx.arc(0, 0, PLAYER_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
-    ctx.strokeStyle = "rgba(230,255,255,.92)"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(facingX * 24, facingY * 24); ctx.lineTo(facingX * 43, facingY * 43); ctx.stroke();
+    const attackProgress = this.attackTime > 0 ? 1 - this.attackTime / .28 : 0;
+    ctx.save();
+    ctx.rotate(facing + Math.PI / 4 + (this.attackTime > 0 ? -1.1 + attackProgress * 2.2 : -.42));
+    if (this.images.sword?.complete && this.images.sword.naturalWidth) {
+      const size = this.attackTime > 0 ? 98 : 82;
+      ctx.shadowColor = "#4df6ff";
+      ctx.shadowBlur = 12;
+      ctx.drawImage(this.images.sword, 10, -size / 2, size, size);
+    }
+    ctx.restore();
     if (this.attackTime > 0) {
-      const progress = 1 - this.attackTime / .28;
-      const base = Math.atan2(facingY, facingX);
-      ctx.strokeStyle = "rgba(77,246,255,.92)"; ctx.lineWidth = 8; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.arc(0, 0, 58, base - 1.3 + progress * .9, base + .4 + progress * .9); ctx.stroke();
-      ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
-      ctx.lineCap = "butt";
+      const impact = this.images.bladeHit;
+      if (impact?.complete && impact.naturalWidth && attackProgress > .35 && attackProgress < .72) {
+        ctx.save();
+        ctx.translate(facingX * 82, facingY * 82);
+        ctx.rotate(facing);
+        ctx.globalAlpha = .85;
+        ctx.drawImage(impact, -38, -38, 76, 76);
+        ctx.restore();
+      }
     }
     ctx.restore();
   }
