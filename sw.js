@@ -88,8 +88,6 @@ const ASSET_SHELL = [
   versioned("./assets/effects/skill-core.png"),
   versioned("./assets/effects/dash-arrival.png"),
   versioned("./assets/effects/execution-burst.png"),
-  versioned("./assets/effects/screen-success-overload.png"),
-  versioned("./assets/effects/screen-danger-fracture.png"),
   versioned("./assets/audio/swing-whoosh-1.wav"),
   versioned("./assets/audio/swing-whoosh-2.wav"),
   versioned("./assets/audio/bullet-impact.wav"),

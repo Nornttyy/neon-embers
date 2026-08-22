@@ -171,16 +171,12 @@ function renderLoadProgress({
     setLoadingStatus(`生成受击与动作材质 ${prepared}/${phaseTotal}`, 76 + (phaseTotal ? prepared / phaseTotal * 4 : 0));
   } else if (phase === "sprite-warm") {
     setLoadingStatus("提交角色材质", phaseLoaded >= phaseTotal ? 82 : 80);
-  } else if (phase === "screen-composites") {
-    setLoadingStatus("合成全屏反馈", 82 + (phaseTotal ? Math.min(phaseTotal, phaseLoaded) / phaseTotal * 2 : 0));
-  } else if (phase === "screen-composite-warm") {
-    setLoadingStatus("提交全屏反馈", phaseLoaded >= phaseTotal ? 85 : 84);
   } else if (phase === "vfx-source") {
-    setLoadingStatus("准备战斗特效", 87);
+    setLoadingStatus("准备战斗特效", 85);
   } else if (phase === "vfx-lighter") {
-    setLoadingStatus("准备能量光效", 92);
+    setLoadingStatus("准备能量光效", 91);
   } else if (phase === "vfx-screen") {
-    setLoadingStatus("校准冲击光效", 97);
+    setLoadingStatus("校准冲击光效", 96);
   } else if (phase === "arena-cache") {
     setLoadingStatus("构建完整战区", phaseLoaded >= phaseTotal ? 100 : 98);
   } else if (phase === "ready") {

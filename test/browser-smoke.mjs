@@ -20,7 +20,6 @@ const requiredMaterialPaths = [
   "assets/effects/boss-burst-hard.png", "assets/effects/energy-spark.png", "assets/effects/impact-shard.png",
   "assets/effects/combo-finisher.png", "assets/effects/parry-counter.png", "assets/effects/skill-core.png",
   "assets/effects/dash-arrival.png", "assets/effects/execution-burst.png",
-  "assets/effects/screen-success-overload.png", "assets/effects/screen-danger-fracture.png",
   "assets/items/repair-kit.png", "assets/items/ammo-cell.png", "assets/items/stamina-cell.png", "assets/items/barrier-module.png",
   "assets/enemies/skitter-drone.png", "assets/enemies/lancer-drone.png",
   "assets/world/room-floor.png", "assets/world/outer-floor.png", "assets/world/blockade-floor.png",
@@ -383,7 +382,6 @@ try {
         'assets/effects/impact-shard.png', 'assets/effects/combo-finisher.png',
         'assets/effects/parry-counter.png', 'assets/effects/skill-core.png',
         'assets/effects/dash-arrival.png', 'assets/effects/execution-burst.png',
-        'assets/effects/screen-success-overload.png', 'assets/effects/screen-danger-fracture.png',
         'assets/enemies/skitter-drone.png', 'assets/items/barrier-module.png',
         'assets/ui/power-upgrade.png', 'assets/world/room-floor.png'
       ];
@@ -516,16 +514,6 @@ try {
         playerSkill: Object.keys(game?.filteredSprites.playerSkill || {}).length,
         playerDash: Object.keys(game?.filteredSprites.playerDash || {}).length,
       },
-      screenOverlaySpriteState: {
-        ready: game?.screenOverlaySpriteState.ready,
-        prepared: game?.screenOverlaySpriteState.prepared,
-        warmed: game?.screenOverlaySpriteState.warmed,
-        total: game?.screenOverlaySpriteState.total,
-        failed: game?.screenOverlaySpriteState.failed.length,
-        normal: Object.keys(game?.screenOverlaySprites || {}).filter((key) => key.endsWith(':normal')).length,
-        reduced: Object.keys(game?.screenOverlaySprites || {}).filter((key) => key.endsWith(':reduced')).length,
-        fullResolution: Object.values(game?.screenOverlaySprites || {}).every((sprite) => sprite.width === 512 && sprite.height === 512),
-      },
       arenaCacheState: {
         ready: game?.arenaCache.ready,
         stageKeyMatches: game?.arenaCache.key === 'stage:' + game?.run.stageIndex + ':dpr-' + game?.view.dpr,
@@ -561,16 +549,13 @@ try {
   assert.equal(initial.retiredSlashAbsent, true);
   assert.equal(initial.dynamicMaterialSampler, true);
   assert.equal(initial.assetPreloadReady, true);
-  assert.equal(initial.assetImageTotal, 60);
+  assert.equal(initial.assetImageTotal, 58);
   assert.equal(initial.vfxWarmState.ready, true);
-  assert.equal(initial.vfxWarmState.total, 36);
+  assert.equal(initial.vfxWarmState.total, 34);
   assert.equal(initial.vfxWarmState.warmed, initial.vfxWarmState.total);
   assert.equal(initial.vfxWarmState.failed, 0);
   assert.deepEqual(initial.filteredSpriteState, {
     ready: true, prepared: 14, total: 14, failed: 0, enemyHit: 8, playerSkill: 3, playerDash: 3,
-  });
-  assert.deepEqual(initial.screenOverlaySpriteState, {
-    ready: true, prepared: 20, warmed: 20, total: 20, failed: 0, normal: 10, reduced: 10, fullResolution: true,
   });
   assert.deepEqual(initial.arenaCacheState, {
     ready: true, stageKeyMatches: true, sizeCorrect: true, previousRoomReleased: true, loadingHidden: true,
@@ -579,264 +564,23 @@ try {
   assert.equal(initial.generatedEnemyRendering, true);
   assert.equal(initial.generatedPlayerRendering, true);
 
-  const screenFeedback = await evaluate(`(() => {
+  const retiredScreenFlash = await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
-    const previous = {
-      screenFlash: game.screenFlash,
-      screenFlashClock: game.screenFlashClock,
-      screenFlashNextAt: game.screenFlashNextAt,
-      screenFlashLastByKind: game.screenFlashLastByKind,
-      reduceFlash: game.settings.reduceFlash,
-      effects: game.effects,
-      pickups: game.pickups,
-      damageTexts: game.damageTexts,
-      kills: game.run.kills,
-      defeated: game.run.stageDefeated,
-      attackIndex: game.player.attackIndex,
+    return {
+      noStateMachine: !('screenFlash' in game)
+        && typeof game.triggerScreenFlash !== 'function'
+        && typeof game.renderScreenFlash !== 'function',
+      noOverlaySprites: !('screenOverlaySprites' in game)
+        && !('screenSuccess' in game.images)
+        && !('screenDanger' in game.images),
+      originalFlashReady: typeof game.flash === 'number',
     };
-    const resetFlash = () => {
-      game.screenFlash = null;
-      game.screenFlashClock = 10;
-      game.screenFlashNextAt = 0;
-      game.screenFlashLastByKind = Object.create(null);
-    };
-    const makeEnemy = (hp = 1000) => ({
-      x: game.player.x + 70, y: game.player.y, radius: 18,
-      hp, maxHp: hp, dead: false, energy: 1, elite: false, boss: false,
-      color: '#ff4f8b', rotation: 0, hitFlash: 0, pushX: 0, pushY: 0,
-    });
-    const renderSample = (kind, reduced) => {
-      resetFlash();
-      game.settings.reduceFlash = reduced;
-      const accepted = game.triggerScreenFlash(kind);
-      game.screenFlash.life = game.screenFlash.maxLife * 0.9;
-      let edgeAlpha = 0;
-      let tintAlpha = 0;
-      let tint = '';
-      let imagePath = '';
-      let compositeUsed = false;
-      let compositeWidth = 0;
-      let compositeHeight = 0;
-      let fallbackTintDraws = 0;
-      const effect = game.screenFlash;
-      const composite = game.screenOverlaySprites[kind + ':' + (reduced ? 'reduced' : 'normal')];
-      const sourceImage = game.images[effect.family === 'success' ? 'screenSuccess' : 'screenDanger'];
-      const originalDrawImage = game.ctx.drawImage;
-      const originalFillRect = game.ctx.fillRect;
-      game.ctx.drawImage = function(image, ...args) {
-        if (image === composite) {
-          edgeAlpha = this.globalAlpha;
-          compositeUsed = true;
-          compositeWidth = image.width;
-          compositeHeight = image.height;
-          imagePath = new URL(sourceImage.src).pathname;
-        }
-        return originalDrawImage.call(this, image, ...args);
-      };
-      game.ctx.fillRect = function(...args) {
-        fallbackTintDraws += 1;
-        return originalFillRect.call(this, ...args);
-      };
-      let rendered = false;
-      try {
-        game.ctx.save();
-        game.ctx.globalAlpha = 1;
-        rendered = game.renderScreenFlash(game.ctx);
-        game.ctx.restore();
-      } finally {
-        game.ctx.drawImage = originalDrawImage;
-        game.ctx.fillRect = originalFillRect;
-      }
-      const reducedScale = reduced ? 0.24 : 1;
-      const edgePeak = reduced ? Math.min(0.1, effect.edgeAlpha * reducedScale) : effect.edgeAlpha;
-      const tintPeak = reduced ? Math.min(0.02, effect.tintAlpha * reducedScale) : effect.tintAlpha;
-      const frameAlpha = edgePeak ? edgeAlpha / edgePeak : 0;
-      tintAlpha = tintPeak * frameAlpha;
-      tint = effect.family === 'success' ? '#4df6ff' : '#ff2e67';
-      return {
-        accepted, rendered, edgeAlpha, tintAlpha, tint, imagePath,
-        compositeUsed, compositeWidth, compositeHeight, fallbackTintDraws,
-      };
-    };
-
-    game.effects = [];
-    game.pickups = [];
-    game.damageTexts = [];
-    try {
-      resetFlash();
-      const firstAccepted = game.triggerScreenFlash('combo');
-      const firstObject = game.screenFlash;
-      game.updateScreenFlash(0.06);
-      const progressBeforeUpgrade = 1 - game.screenFlash.life / game.screenFlash.maxLife;
-      const nextAtBeforeUpgrade = game.screenFlashNextAt;
-      const higherAccepted = game.triggerScreenFlash('execution');
-      const stayedSameObject = game.screenFlash === firstObject;
-      const progressAfterUpgrade = 1 - game.screenFlash.life / game.screenFlash.maxLife;
-      const priorityKind = game.screenFlash?.kind;
-      const progressPreserved = Math.abs(progressAfterUpgrade - progressBeforeUpgrade) < 0.000001;
-      const nextAtNotRestarted = game.screenFlashNextAt === nextAtBeforeUpgrade;
-      const singletonCount = Number(Boolean(game.screenFlash)) + Number(Array.isArray(game.screenFlash));
-
-      resetFlash();
-      const parryAccepted = game.triggerScreenFlash('parry');
-      const parryObject = game.screenFlash;
-      const parryNextAt = game.screenFlashNextAt;
-      const executionAfterParryAccepted = game.triggerScreenFlash('execution');
-      const parryStayedActive = game.screenFlash === parryObject && game.screenFlash?.kind === 'parry';
-      const parryCooldownUnchanged = game.screenFlashNextAt === parryNextAt;
-
-      resetFlash();
-      const initialDash = game.triggerScreenFlash('dash');
-      const duplicateDash = game.triggerScreenFlash('dash');
-      game.updateScreenFlash(0.17);
-      const blockedInsideGlobalWindow = game.triggerScreenFlash('dash');
-      game.updateScreenFlash(0.18);
-      const acceptedAfterGlobalWindow = game.triggerScreenFlash('dash');
-
-      resetFlash();
-      game.player.attackIndex = 0;
-      game.damageEnemy(makeEnemy(1000), 1, 'melee', { x: 1, y: 0 }, 0);
-      const ordinaryHitStayedLocal = game.screenFlash === null;
-      game.damageEnemy(makeEnemy(1), 2, 'melee', { x: 1, y: 0 }, 0);
-      const ordinaryKillStayedLocal = game.screenFlash === null;
-
-      resetFlash();
-      game.player.attackIndex = 2;
-      game.damageEnemy(makeEnemy(1000), 1, 'melee', { x: 1, y: 0 }, 0);
-      const comboKind = game.screenFlash?.kind;
-
-      resetFlash();
-      game.killEnemy(makeEnemy(1), { finisher: true });
-      const executionKind = game.screenFlash?.kind;
-
-      const success = renderSample('parry', false);
-      const successReduced = renderSample('parry', true);
-      const danger = renderSample('execution', false);
-      const dangerReduced = renderSample('execution', true);
-
-      resetFlash();
-      game.triggerScreenFlash('parry');
-      const expiryDuration = game.screenFlash.maxLife;
-      game.updateScreenFlash(expiryDuration + 0.01);
-
-      return {
-        firstAccepted,
-        stayedSameObject,
-        higherAccepted,
-        priorityKind,
-        progressPreserved,
-        nextAtNotRestarted,
-        singletonCount,
-        parryAccepted,
-        executionAfterParryAccepted,
-        parryStayedActive,
-        parryCooldownUnchanged,
-        initialDash,
-        duplicateDash,
-        blockedInsideGlobalWindow,
-        acceptedAfterGlobalWindow,
-        ordinaryHitStayedLocal,
-        ordinaryKillStayedLocal,
-        comboKind,
-        executionKind,
-        expired: game.screenFlash === null,
-        success,
-        successReduced,
-        danger,
-        dangerReduced,
-      };
-    } finally {
-      game.screenFlash = previous.screenFlash;
-      game.screenFlashClock = previous.screenFlashClock;
-      game.screenFlashNextAt = previous.screenFlashNextAt;
-      game.screenFlashLastByKind = previous.screenFlashLastByKind;
-      game.settings.reduceFlash = previous.reduceFlash;
-      game.effects = previous.effects;
-      game.pickups = previous.pickups;
-      game.damageTexts = previous.damageTexts;
-      game.run.kills = previous.kills;
-      game.run.stageDefeated = previous.defeated;
-      game.player.attackIndex = previous.attackIndex;
-    }
   })()`);
-  assert.deepEqual({
-    firstAccepted: screenFeedback.firstAccepted,
-    stayedSameObject: screenFeedback.stayedSameObject,
-    higherAccepted: screenFeedback.higherAccepted,
-    priorityKind: screenFeedback.priorityKind,
-    progressPreserved: screenFeedback.progressPreserved,
-    nextAtNotRestarted: screenFeedback.nextAtNotRestarted,
-    singletonCount: screenFeedback.singletonCount,
-    parryAccepted: screenFeedback.parryAccepted,
-    executionAfterParryAccepted: screenFeedback.executionAfterParryAccepted,
-    parryStayedActive: screenFeedback.parryStayedActive,
-    parryCooldownUnchanged: screenFeedback.parryCooldownUnchanged,
-    initialDash: screenFeedback.initialDash,
-    duplicateDash: screenFeedback.duplicateDash,
-    blockedInsideGlobalWindow: screenFeedback.blockedInsideGlobalWindow,
-    acceptedAfterGlobalWindow: screenFeedback.acceptedAfterGlobalWindow,
-    ordinaryHitStayedLocal: screenFeedback.ordinaryHitStayedLocal,
-    ordinaryKillStayedLocal: screenFeedback.ordinaryKillStayedLocal,
-    comboKind: screenFeedback.comboKind,
-    executionKind: screenFeedback.executionKind,
-    expired: screenFeedback.expired,
-  }, {
-    firstAccepted: true,
-    stayedSameObject: true,
-    higherAccepted: true,
-    priorityKind: "execution",
-    progressPreserved: true,
-    nextAtNotRestarted: true,
-    singletonCount: 1,
-    parryAccepted: true,
-    executionAfterParryAccepted: false,
-    parryStayedActive: true,
-    parryCooldownUnchanged: true,
-    initialDash: true,
-    duplicateDash: false,
-    blockedInsideGlobalWindow: false,
-    acceptedAfterGlobalWindow: true,
-    ordinaryHitStayedLocal: true,
-    ordinaryKillStayedLocal: true,
-    comboKind: "combo",
-    executionKind: "execution",
-    expired: true,
+  assert.deepEqual(retiredScreenFlash, {
+    noStateMachine: true,
+    noOverlaySprites: true,
+    originalFlashReady: true,
   });
-  assert.deepEqual({
-    successAccepted: screenFeedback.success.accepted,
-    successRendered: screenFeedback.success.rendered,
-    successPath: screenFeedback.success.imagePath,
-    successTint: screenFeedback.success.tint,
-    dangerAccepted: screenFeedback.danger.accepted,
-    dangerRendered: screenFeedback.danger.rendered,
-    dangerPath: screenFeedback.danger.imagePath,
-    dangerTint: screenFeedback.danger.tint,
-  }, {
-    successAccepted: true,
-    successRendered: true,
-    successPath: "/assets/effects/screen-success-overload.png",
-    successTint: "#4df6ff",
-    dangerAccepted: true,
-    dangerRendered: true,
-    dangerPath: "/assets/effects/screen-danger-fracture.png",
-    dangerTint: "#ff2e67",
-  });
-  for (const [normal, reduced] of [
-    [screenFeedback.success, screenFeedback.successReduced],
-    [screenFeedback.danger, screenFeedback.dangerReduced],
-  ]) {
-    assert.equal(normal.compositeUsed, true);
-    assert.equal(reduced.compositeUsed, true);
-    assert.deepEqual([normal.compositeWidth, normal.compositeHeight], [512, 512]);
-    assert.deepEqual([reduced.compositeWidth, reduced.compositeHeight], [512, 512]);
-    assert.equal(normal.fallbackTintDraws, 0);
-    assert.equal(reduced.fallbackTintDraws, 0);
-    assert.ok(normal.edgeAlpha > 0 && normal.tintAlpha > 0);
-    assert.ok(reduced.edgeAlpha > 0 && reduced.edgeAlpha <= 0.100001);
-    assert.ok(reduced.tintAlpha > 0 && reduced.tintAlpha <= 0.020001);
-    assert.ok(reduced.edgeAlpha / normal.edgeAlpha <= 0.240001);
-    assert.ok(reduced.tintAlpha / normal.tintAlpha <= 0.240001);
-  }
 
   const controlRouting = await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
@@ -1516,19 +1260,11 @@ try {
       kills: game.run.kills,
       defeated: game.run.stageDefeated,
       attackIndex: game.player.attackIndex,
-      screenFlash: game.screenFlash,
-      screenFlashClock: game.screenFlashClock,
-      screenFlashNextAt: game.screenFlashNextAt,
-      screenFlashLastByKind: game.screenFlashLastByKind,
     };
     game.enemies = [];
     game.effects = [];
     game.pickups = [];
     game.damageTexts = [];
-    game.screenFlash = null;
-    game.screenFlashClock = 10;
-    game.screenFlashNextAt = 0;
-    game.screenFlashLastByKind = Object.create(null);
     const drawnKeys = [];
     const drawnPaths = [];
     const originalDrawImage = game.ctx.drawImage;
@@ -1554,8 +1290,6 @@ try {
           && drawnPaths.some((path) => path.endsWith('/assets/effects/combo-finisher.png')),
         executionDrawImage: drawnKeys.includes('executionBurst')
           && drawnPaths.some((path) => path.endsWith('/assets/effects/execution-burst.png')),
-        screenKind: game.screenFlash?.kind,
-        singletonScreenFeedback: Boolean(game.screenFlash) && !Array.isArray(game.screenFlash),
         noGenericSlash: drawnPaths.every((path) => !path.endsWith('/assets/effects/slash-arc.png')),
       };
     } finally {
@@ -1567,10 +1301,6 @@ try {
       game.run.kills = previous.kills;
       game.run.stageDefeated = previous.defeated;
       game.player.attackIndex = previous.attackIndex;
-      game.screenFlash = previous.screenFlash;
-      game.screenFlashClock = previous.screenFlashClock;
-      game.screenFlashNextAt = previous.screenFlashNextAt;
-      game.screenFlashLastByKind = previous.screenFlashLastByKind;
     }
   })()`);
   assert.deepEqual(signatureImpactMaterials, {
@@ -1578,8 +1308,6 @@ try {
     executionEvent: true,
     comboDrawImage: true,
     executionDrawImage: true,
-    screenKind: "execution",
-    singletonScreenFeedback: true,
     noGenericSlash: true,
   });
 
@@ -1671,9 +1399,6 @@ try {
   const parry = await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
     game.effects = [];
-    game.screenFlash = null;
-    game.screenFlashNextAt = 0;
-    game.screenFlashLastByKind = Object.create(null);
     game.player.action = 'idle';
     game.pointer.active = false;
     game.setBlocking(true);
@@ -1697,12 +1422,11 @@ try {
       material: game.effects.some((effect) => /parry/i.test(effect.type)),
       counterEvent,
       counterDrawImage: drawn.some((path) => path.endsWith('/assets/effects/parry-counter.png')),
-      screenKind: game.screenFlash?.kind,
     };
   })()`);
   assert.deepEqual(parry, {
     result: "parry", healthUnchanged: true, stunned: true, material: true,
-    counterEvent: true, counterDrawImage: true, screenKind: "parry",
+    counterEvent: true, counterDrawImage: true,
   });
 
   const heldDefense = await evaluate(`(() => {
@@ -1761,22 +1485,30 @@ try {
       barrier: game.player.barrier,
       invulnerable: game.player.invulnerable,
       action: game.player.action,
+      flash: game.flash,
+      reduceFlash: game.settings.reduceFlash,
     };
-    game.screenFlash = null;
-    game.screenFlashNextAt = 0;
-    game.screenFlashLastByKind = Object.create(null);
+    game.flash = 0;
+    game.settings.reduceFlash = false;
     game.player.action = 'idle';
     game.player.invulnerable = 0;
     game.player.barrier = 0;
     game.applyHealthDamage(1, { x: game.player.x + 20, y: game.player.y });
-    const screenKind = game.screenFlash?.kind;
+    const normalFlash = game.flash;
+    game.flash = 0;
+    game.player.invulnerable = 0;
+    game.settings.reduceFlash = true;
+    game.applyHealthDamage(1, { x: game.player.x + 20, y: game.player.y });
+    const reducedFlash = game.flash;
     game.player.health = previous.health;
     game.player.barrier = previous.barrier;
     game.player.invulnerable = previous.invulnerable;
     game.player.action = previous.action;
-    return { screenKind, singleton: Boolean(game.screenFlash) && !Array.isArray(game.screenFlash) };
+    game.flash = previous.flash;
+    game.settings.reduceFlash = previous.reduceFlash;
+    return { normalFlash, reducedFlash };
   })()`);
-  assert.deepEqual(hurtFeedback, { screenKind: "hurt", singleton: true });
+  assert.deepEqual(hurtFeedback, { normalFlash: 0.22, reducedFlash: 0.06 });
 
   const guardBreak = await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
@@ -1788,25 +1520,18 @@ try {
     game.setBlocking(true);
     game.player.facing = 0;
     game.player.parryTimer = 0;
-    game.screenFlash = null;
-    game.screenFlashNextAt = 0;
-    game.screenFlashLastByKind = Object.create(null);
     const result = game.damagePlayer(24, source, 1.2);
     const material = game.effects.some((effect) => /break/i.test(effect.type));
-    const screenKind = game.screenFlash?.kind;
     game.player.stamina = game.player.maxStamina;
     game.player.action = 'idle';
     game.player.blockHeld = false;
-    return { result, material, screenKind };
+    return { result, material };
   })()`);
-  assert.deepEqual(guardBreak, { result: "broken", material: true, screenKind: "guardBreak" });
+  assert.deepEqual(guardBreak, { result: "broken", material: true });
 
   const generatedDash = await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
     game.effects = [];
-    game.screenFlash = null;
-    game.screenFlashNextAt = 0;
-    game.screenFlashLastByKind = Object.create(null);
     game.player.action = 'idle';
     game.player.stamina = game.player.maxStamina;
     game.player.dashCooldown = 0;
@@ -1826,11 +1551,10 @@ try {
       arrivalEvent: game.effects.some((effect) => effect.type === 'dashArrival'),
       streakDrawImage: drawn.some((path) => path.endsWith('/assets/effects/dash-streak-hard.png')),
       arrivalDrawImage: drawn.some((path) => path.endsWith('/assets/effects/dash-arrival.png')),
-      screenKind: game.screenFlash?.kind,
     };
   })()`);
   assert.deepEqual(generatedDash, {
-    streakEvent: true, arrivalEvent: true, streakDrawImage: true, arrivalDrawImage: true, screenKind: "dash",
+    streakEvent: true, arrivalEvent: true, streakDrawImage: true, arrivalDrawImage: true,
   });
 
   const generatedSkill = await evaluate(`(() => {
@@ -1838,9 +1562,6 @@ try {
     const previousEnemies = game.enemies;
     game.enemies = [];
     game.effects = [];
-    game.screenFlash = null;
-    game.screenFlashNextAt = 0;
-    game.screenFlashLastByKind = Object.create(null);
     game.player.action = 'idle';
     game.player.skillCooldowns[game.player.activeSkillSlot - 1] = 0;
     game.requestSkill();
@@ -1860,12 +1581,11 @@ try {
       skillEvent: game.effects.some((effect) => /pulse|skill/i.test(effect.type)),
       pulseDrawImage: drawn.some((path) => path.endsWith('/assets/effects/pulse-wave.png')),
       coreDrawImage: drawn.some((path) => path.endsWith('/assets/effects/skill-core.png')),
-      screenKind: game.screenFlash?.kind,
     };
     game.enemies = previousEnemies;
     return result;
   })()`);
-  assert.deepEqual(generatedSkill, { skillEvent: true, pulseDrawImage: true, coreDrawImage: true, screenKind: "skill" });
+  assert.deepEqual(generatedSkill, { skillEvent: true, pulseDrawImage: true, coreDrawImage: true });
 
   if (process.env.NEON_SMOKE_BATTLE_SHOT) {
     await evaluate(`(() => {
@@ -2112,7 +1832,6 @@ try {
       bar: document.querySelector('#boss-bar').classList.contains('is-active'),
       burst: game.effects.some((effect) => /boss/i.test(effect.type)),
       material: drawn.some((path) => path.endsWith('/assets/effects/boss-burst-hard.png')),
-      screenKind: game.screenFlash?.kind,
     };
   })()`);
   assert.equal(boss.spawned, true);
@@ -2120,14 +1839,11 @@ try {
   assert.equal(boss.bar, true);
   assert.equal(boss.burst, true);
   assert.equal(boss.material, true);
-  assert.equal(boss.screenKind, "boss");
 
-  const victoryScreenKind = await evaluate(`(() => {
+  await evaluate(`(() => {
     const game = window.__NEON_DEBUG__.game;
     game.damageEnemy(game.run.boss, 999999, 'melee');
-    return game.screenFlash?.kind;
   })()`);
-  assert.equal(victoryScreenKind, "victory");
   await delay(120);
   assert.equal(await evaluate("document.querySelector('#result-screen').classList.contains('is-active')"), true);
   assert.equal(await evaluate("window.__NEON_DEBUG__.audio.musicPlaying"), false);
@@ -2147,7 +1863,7 @@ try {
   })()`);
   assert.deepEqual(upgradeCards, { count: 3, ready: true, versioned: true, correctArt: true });
   assert.deepEqual(exceptions, []);
-  console.log("Browser smoke passed: 1/2 and debounced-wheel weapon switching, R/Q expandable skill slots, multi-source guard recovery, current-weapon attacks, 36/36 VFX and 20/20 full-screen composite prewarm, six event-linked impact materials, two throttled full-screen materials, capped moving spark/shard particles, endpoint blade trails, and mission flows are functional.");
+  console.log("Browser smoke passed: 1/2 and debounced-wheel weapon switching, R/Q expandable skill slots, multi-source guard recovery, current-weapon attacks, 34/34 VFX prewarm, six event-linked impact materials, retired full-screen edge flashes, capped moving spark/shard particles, endpoint blade trails, and mission flows are functional.");
   }
 } finally {
   socket?.close();

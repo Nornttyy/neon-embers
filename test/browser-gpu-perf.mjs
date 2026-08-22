@@ -178,63 +178,55 @@ try {
       life: 0.24,
       maxLife: 0.3,
     }));
-    const setFlash = (kind) => {
-      game.screenFlash = null;
-      game.screenFlashClock = 20;
-      game.screenFlashNextAt = 0;
-      game.screenFlashLastByKind = Object.create(null);
-      game.triggerScreenFlash(kind);
+    const makeSignatureEffect = (kind) => kind === 'parry' ? {
+      type: 'parryFlash', x: game.camera.x, y: game.camera.y,
+      angle: 0, radius: 150, life: 0.34, maxLife: 0.34,
+      color: '#ffffff', counter: true,
+    } : {
+      type: 'enemyDestroy', x: game.camera.x, y: game.camera.y,
+      angle: 0, radius: 176, life: 0.48, maxLife: 0.48,
+      color: '#ff4f8b', finisher: true,
     };
     const measure = async (name, kind = null, particles = false) => {
       game.effects = [];
-      game.screenFlash = null;
       globalThis.gc?.();
       await waitFrames(36);
 
-      const cpu = [];
-      const original = game.renderScreenFlash;
-      game.renderScreenFlash = function(context) {
-        const started = performance.now();
-        const rendered = original.call(this, context);
-        cpu.push(performance.now() - started);
-        return rendered;
+      const seedEffects = () => {
+        const seeded = particles ? makeParticles() : [];
+        if (kind) seeded.push(makeSignatureEffect(kind));
+        game.effects = seeded;
       };
       const intervals = [];
       let previous;
       let firstTrigger = 0;
-      try {
-        await new Promise((resolve) => {
-          const next = (time) => {
-            if (previous == null) {
-              previous = time;
-              if (kind) setFlash(kind);
-              if (particles) game.effects = makeParticles();
-              requestAnimationFrame(next);
-              return;
-            }
-            const interval = time - previous;
-            intervals.push(interval);
-            if (!firstTrigger) firstTrigger = interval;
+      await new Promise((resolve) => {
+        const next = (time) => {
+          if (previous == null) {
             previous = time;
-            if (kind && !game.screenFlash) game.triggerScreenFlash(kind);
-            if (particles) {
-              game.updateEffects(Math.min(0.034, interval / 1000));
-              const moving = game.effects.filter((effect) => effect.type === 'energySpark' || effect.type === 'impactShard');
-              if (moving.length < 48) game.effects = makeParticles();
-            }
-            if (intervals.length >= 240) resolve();
-            else requestAnimationFrame(next);
-          };
-          requestAnimationFrame(next);
-        });
-      } finally {
-        game.renderScreenFlash = original;
-      }
+            if (kind || particles) seedEffects();
+            requestAnimationFrame(next);
+            return;
+          }
+          const interval = time - previous;
+          intervals.push(interval);
+          if (!firstTrigger) firstTrigger = interval;
+          previous = time;
+          if (kind || particles) {
+            game.updateEffects(Math.min(0.034, interval / 1000));
+            const signatureAlive = !kind || game.effects.some((effect) => effect.type === (kind === 'parry' ? 'parryFlash' : 'enemyDestroy'));
+            const movingCount = game.effects.filter((effect) => effect.type === 'energySpark' || effect.type === 'impactShard').length;
+            if (!signatureAlive || (particles && movingCount < 48)) seedEffects();
+          }
+          if (intervals.length >= 240) resolve();
+          else requestAnimationFrame(next);
+        };
+        requestAnimationFrame(next);
+      });
       return {
         name,
         firstTrigger,
         frames: summarize(intervals.slice(8)),
-        renderScreenFlashCpu: summarize(cpu.slice(8)),
       };
     };
 
@@ -246,10 +238,7 @@ try {
       pickups: game.pickups,
       damageTexts: game.damageTexts,
       effects: game.effects,
-      screenFlash: game.screenFlash,
-      reduceFlash: game.settings.reduceFlash,
     };
-    game.settings.reduceFlash = false;
     game.update = () => {};
     game.enemies = [];
     game.projectiles = [];
@@ -258,10 +247,10 @@ try {
     game.state = 'playing';
     try {
       const baseline = await measure('baseline');
-      const success = await measure('success', 'parry');
-      const danger = await measure('danger', 'execution');
-      const dangerParticles = await measure('danger+48-particles', 'execution', true);
-      const scenarios = [success, danger, dangerParticles].map((scenario) => ({
+      const parry = await measure('parry-counter', 'parry');
+      const execution = await measure('execution-burst', 'execution');
+      const executionParticles = await measure('execution+48-particles', 'execution', true);
+      const scenarios = [parry, execution, executionParticles].map((scenario) => ({
         ...scenario,
         p95Delta: scenario.frames.p95 - baseline.frames.p95,
       }));
@@ -274,7 +263,6 @@ try {
           assets: [game.assetLoadState.loaded, game.assetLoadState.total],
           vfx: [game.vfxWarmState.warmed, game.vfxWarmState.total],
           filteredSprites: [game.filteredSpriteState.prepared, game.filteredSpriteState.total],
-          screenComposites: [game.screenOverlaySpriteState.warmed, game.screenOverlaySpriteState.total],
           movingParticles: 48,
         },
         baseline,
@@ -288,8 +276,6 @@ try {
       game.pickups = previous.pickups;
       game.damageTexts = previous.damageTexts;
       game.effects = previous.effects;
-      game.screenFlash = previous.screenFlash;
-      game.settings.reduceFlash = previous.reduceFlash;
     }
   })()`);
   let benchmarkTimeout;
@@ -306,10 +292,9 @@ try {
   assert.deepEqual(report.environment.viewport, [1920, 1200]);
   assert.deepEqual(report.environment.canvas, [1920, 1200]);
   assert.equal(report.environment.dpr, 1);
-  assert.deepEqual(report.environment.assets, [60, 60]);
-  assert.deepEqual(report.environment.vfx, [36, 36]);
+  assert.deepEqual(report.environment.assets, [58, 58]);
+  assert.deepEqual(report.environment.vfx, [34, 34]);
   assert.deepEqual(report.environment.filteredSprites, [14, 14]);
-  assert.deepEqual(report.environment.screenComposites, [20, 20]);
   assert.equal(report.environment.movingParticles, 48);
   assert.ok(report.environment.refreshMedian < 10, `a 120 Hz display path is required; median frame interval was ${report.environment.refreshMedian.toFixed(2)} ms`);
   console.log(`GPU: ${gpu}`);
@@ -320,10 +305,9 @@ try {
     assert.ok(scenario.frames.max < 12, `${scenario.name} max frame must be < 12 ms, got ${scenario.frames.max.toFixed(2)} ms`);
     assert.equal(scenario.frames.over12, 0, `${scenario.name} must not have frames >= 12 ms`);
     assert.equal(scenario.frames.over20, 0, `${scenario.name} must not have frames >= 20 ms`);
-    assert.ok(scenario.renderScreenFlashCpu.p95 <= 0.5, `${scenario.name} renderScreenFlash CPU p95 must be <= 0.5 ms, got ${scenario.renderScreenFlashCpu.p95.toFixed(3)} ms`);
   }
 
-  console.log("GPU performance passed: 1920x1200 Metal rendering keeps success, danger, and danger+48-particle screen feedback within the 0.9.6 frame budget.");
+  console.log("GPU performance passed: 1920x1200 Metal rendering keeps parry, execution, and 48-particle local feedback within the frame budget without full-screen edge flashes.");
 } finally {
   try {
     await browserConnection?.command("Browser.close");
