@@ -7,6 +7,8 @@ import { join } from "node:path";
 const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const baseUrl = process.env.NEON_SMOKE_URL || "http://127.0.0.1:4173";
 const publicBlackBox = process.env.NEON_PUBLIC_BLACKBOX === "1";
+const viewportWidth = Number(process.env.NEON_SMOKE_VIEWPORT_WIDTH) || 1280;
+const viewportHeight = Number(process.env.NEON_SMOKE_VIEWPORT_HEIGHT) || 800;
 const requiredMaterialPaths = [
   "assets/effects/guard-field.png", "assets/effects/parry-flash.png", "assets/effects/guard-break.png",
   "assets/effects/pulse-wave.png", "assets/effects/overdrive-aura.png", "assets/effects/barrier-shell.png",
@@ -33,7 +35,7 @@ const browser = spawn(chromePath, [
   "--no-sandbox",
   `--remote-debugging-port=${debugPort}`,
   `--user-data-dir=${profileDir}`,
-  "--window-size=1280,800",
+  `--window-size=${viewportWidth},${viewportHeight}`,
   "about:blank",
 ], { stdio: "ignore" });
 
@@ -164,6 +166,11 @@ try {
 
   await command("Runtime.enable");
   await command("Page.enable");
+  if (process.env.NEON_SMOKE_VIEWPORT_WIDTH || process.env.NEON_SMOKE_VIEWPORT_HEIGHT) {
+    await command("Emulation.setDeviceMetricsOverride", {
+      width: viewportWidth, height: viewportHeight, deviceScaleFactor: 1, mobile: false,
+    });
+  }
   await command("Page.navigate", { url: `${baseUrl.replace(/\/$/, "")}/` });
   let titleReady = false;
   for (let attempt = 0; attempt < 300; attempt += 1) {
@@ -194,7 +201,7 @@ try {
     buttonCount: 1,
     buttonText: "进入游戏",
     title: "霓虹余烬",
-    version: "NEON EMBERS // 0.9.8",
+    version: "NEON EMBERS // 0.9.9",
     secondaryOptionsInsideMenu: false,
   });
   if (process.env.NEON_SMOKE_TITLE_SHOT) {
@@ -202,7 +209,47 @@ try {
     await captureScreenshot(process.env.NEON_SMOKE_TITLE_SHOT);
   }
   await evaluate("document.querySelector('#start-button').click()");
-  assert.equal(await evaluate("document.querySelector('#guide-screen').classList.contains('is-active')"), true, "first entry opens the existing guide only after the player clicks");
+  assert.deepEqual(await evaluate(`(() => ({
+    cityActive: document.querySelector('#city-screen').classList.contains('is-active'),
+    tutorialOpen: !document.querySelector('#city-tutorial').hidden,
+    activeStep: document.querySelector('.tutorial-step.is-active')?.dataset.tutorialStep,
+    coreActive: document.querySelector('#core-screen').classList.contains('is-active'),
+    roomActive: document.querySelector('#room-screen').classList.contains('is-active'),
+  }))()`), {
+    cityActive: true, tutorialOpen: true, activeStep: "0", coreActive: false, roomActive: false,
+  }, "new players arrive in the city and see step one without entering a mission");
+  if (process.env.NEON_SMOKE_CITY_TUTORIAL_SHOT) {
+    await delay(400);
+    await captureScreenshot(process.env.NEON_SMOKE_CITY_TUTORIAL_SHOT);
+  }
+  await evaluate("document.querySelector('#tutorial-next').click()");
+  assert.equal(await evaluate("document.querySelector('.tutorial-step.is-active')?.dataset.tutorialStep"), "1");
+  await evaluate("document.querySelector('#tutorial-next').click()");
+  assert.equal(await evaluate("document.querySelector('.tutorial-step.is-active')?.dataset.tutorialStep"), "2");
+  await evaluate("document.querySelector('#tutorial-next').click()");
+  assert.deepEqual(await evaluate(`({
+    cityActive: document.querySelector('#city-screen').classList.contains('is-active'),
+    tutorialClosed: document.querySelector('#city-tutorial').hidden,
+    coreActive: document.querySelector('#core-screen').classList.contains('is-active'),
+    roomActive: document.querySelector('#room-screen').classList.contains('is-active'),
+  })`), { cityActive: true, tutorialClosed: true, coreActive: false, roomActive: false }, "finishing the tutorial leaves the player in the city");
+  if (process.env.NEON_SMOKE_CITY_SHOT) {
+    await delay(400);
+    await captureScreenshot(process.env.NEON_SMOKE_CITY_SHOT);
+  }
+  await evaluate("document.querySelector('#city-screen [data-back=\"menu-screen\"]').click()");
+  await evaluate("document.querySelector('#start-button').click()");
+  assert.deepEqual(await evaluate(`({
+    cityActive: document.querySelector('#city-screen').classList.contains('is-active'),
+    tutorialClosed: document.querySelector('#city-tutorial').hidden,
+    coreActive: document.querySelector('#core-screen').classList.contains('is-active'),
+  })`), { cityActive: true, tutorialClosed: true, coreActive: false }, "returning players still enter the city without replaying onboarding");
+  await evaluate("document.querySelector('#city-mission-button').click()");
+  assert.deepEqual(await evaluate(`({
+    cityActive: document.querySelector('#city-screen').classList.contains('is-active'),
+    coreActive: document.querySelector('#core-screen').classList.contains('is-active'),
+    roomActive: document.querySelector('#room-screen').classList.contains('is-active'),
+  })`), { cityActive: false, coreActive: true, roomActive: false }, "the mission terminal opens loadout selection without starting combat");
 
   await command("Page.navigate", { url: `${baseUrl.replace(/\/$/, "")}/?autostart=hunter` });
   let roomReady = false;
