@@ -39,40 +39,30 @@
       </section>
 
       <section id="menu-screen" class="screen menu-screen is-active" aria-labelledby="game-title">
-        <div class="menu-topline">
-          <span class="signal"><i></i> STAGE MISSION // 0.9.7</span>
-          <button class="icon-button" id="settings-button" type="button" aria-label="打开设置">⚙</button>
+        <div class="title-atmosphere" aria-hidden="true">
+          <i></i><i></i><i></i><i></i>
         </div>
-
-        <div class="hero-panel">
-          <p class="eyebrow">SPHERE COMBAT PROTOCOL</p>
-          <h1 id="game-title"><span>霓虹</span>余烬</h1>
-          <p class="latin-title">NEON EMBERS</p>
-          <p class="tagline">操控科技球体，主动攻击、闪避、格挡与招架。</p>
-
-          <div class="menu-actions">
-            <button class="primary-button" id="start-button" type="button">
-              <span>开始单机闯关</span><small>选择固定装备，连续突破三处战区</small>
-            </button>
-            <button class="secondary-button" id="meta-button" type="button">装备校准</button>
-            <button class="secondary-button" id="guide-button" type="button">新手教程</button>
+        <main class="title-entry">
+          <p class="title-kicker">SPHERE COMBAT PROTOCOL</p>
+          <div class="title-lockup">
+            <h1 id="game-title"><span>霓虹</span>余烬</h1>
+            <p>NEON EMBERS</p>
           </div>
-
-          <div class="profile-strip">
-            <div><span>核心能源</span><strong id="menu-scrap">0</strong></div>
-            <div><span>最高存活</span><strong id="menu-best-time">00:00</strong></div>
-            <div><span>最高击杀</span><strong id="menu-best-kills">0</strong></div>
-          </div>
-        </div>
-
-        <div class="feature-rail" aria-label="版本内容">
-          <span>3 种近战模块</span><span>轨道手枪副武器</span><span>格挡与精准招架</span>
-        </div>
+          <button class="enter-game-button" id="start-button" type="button"><span>进入游戏</span></button>
+        </main>
+        <p class="title-version">NEON EMBERS // 0.9.8</p>
       </section>
 
       <section id="core-screen" class="screen panel-screen" aria-labelledby="core-title">
         <div class="panel-shell wide-panel">
-          <button class="back-button" data-back="menu-screen" type="button">← 返回</button>
+          <div class="panel-navigation">
+            <button class="back-button" data-back="menu-screen" type="button">← 返回标题</button>
+            <nav class="core-tools" aria-label="游戏选项">
+              <button id="meta-button" type="button">装备校准</button>
+              <button id="guide-button" type="button">操作指南</button>
+              <button id="settings-button" type="button">设置</button>
+            </nav>
+          </div>
           <p class="eyebrow">SELECT SPHERE LOADOUT</p>
           <h2 id="core-title">选择科技球体</h2>
           <p class="panel-lead">三种球体使用不同近战节奏，全部配备轨道手枪。</p>
@@ -82,7 +72,7 @@
 
       <section id="meta-screen" class="screen panel-screen" aria-labelledby="meta-title">
         <div class="panel-shell">
-          <button class="back-button" data-back="menu-screen" type="button">← 返回</button>
+          <button class="back-button" data-back="core-screen" type="button">← 返回球体选择</button>
           <p class="eyebrow">PERSISTENT CALIBRATION</p>
           <h2 id="meta-title">装备校准</h2>
           <div class="currency-line">可用核心能源 <strong id="meta-scrap">0</strong></div>
@@ -93,7 +83,7 @@
 
       <section id="guide-screen" class="screen panel-screen" aria-labelledby="guide-title">
         <div class="panel-shell guide-panel">
-          <button class="back-button" data-back="menu-screen" type="button">← 返回</button>
+          <button class="back-button" data-back="core-screen" type="button">← 返回球体选择</button>
           <p class="eyebrow">ACTION TRAINING // 60 SEC</p>
           <h2 id="guide-title">先学会主动战斗</h2>
           <div class="guide-grid">

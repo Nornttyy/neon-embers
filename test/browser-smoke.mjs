@@ -164,6 +164,46 @@ try {
 
   await command("Runtime.enable");
   await command("Page.enable");
+  await command("Page.navigate", { url: `${baseUrl.replace(/\/$/, "")}/` });
+  let titleReady = false;
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    try {
+      titleReady = await evaluate(`Boolean(
+        document.querySelector('#menu-screen')?.classList.contains('is-active')
+        && !document.querySelector('#loading-screen')?.classList.contains('is-active')
+      )`);
+    } catch {}
+    if (titleReady) break;
+    await delay(100);
+  }
+  assert.equal(titleReady, true, "the title entry becomes interactive after runtime assets are ready");
+  const titleEntry = await evaluate(`(() => {
+    const menu = document.querySelector('#menu-screen');
+    const buttons = [...menu.querySelectorAll('button')];
+    return {
+      active: menu.classList.contains('is-active'),
+      buttonCount: buttons.length,
+      buttonText: buttons[0]?.textContent.trim(),
+      title: document.querySelector('#game-title')?.textContent.trim(),
+      version: menu.querySelector('.title-version')?.textContent.trim(),
+      secondaryOptionsInsideMenu: Boolean(menu.querySelector('#meta-button, #guide-button, #settings-button')),
+    };
+  })()`);
+  assert.deepEqual(titleEntry, {
+    active: true,
+    buttonCount: 1,
+    buttonText: "进入游戏",
+    title: "霓虹余烬",
+    version: "NEON EMBERS // 0.9.8",
+    secondaryOptionsInsideMenu: false,
+  });
+  if (process.env.NEON_SMOKE_TITLE_SHOT) {
+    await delay(900);
+    await captureScreenshot(process.env.NEON_SMOKE_TITLE_SHOT);
+  }
+  await evaluate("document.querySelector('#start-button').click()");
+  assert.equal(await evaluate("document.querySelector('#guide-screen').classList.contains('is-active')"), true, "first entry opens the existing guide only after the player clicks");
+
   await command("Page.navigate", { url: `${baseUrl.replace(/\/$/, "")}/?autostart=hunter` });
   let roomReady = false;
   for (let attempt = 0; attempt < 300; attempt += 1) {
